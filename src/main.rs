@@ -102,6 +102,7 @@ async fn main() -> std::io::Result<()> {
             .service(json_handler)  // Register the POST route for JSON
             .service(run_script)  // Register the GET route for running script
             .configure(chats::chat_fill_routes)  // Add chat_fill routes
+            .configure(chats::chat_plain_routes)  // Add chat routes
 
     })
     .bind("localhost:52556")?

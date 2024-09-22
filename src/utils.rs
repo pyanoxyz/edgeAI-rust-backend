@@ -1,8 +1,6 @@
 use reqwest::Client;
 use std::error::Error as StdError;
-use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use serde_json::json;
 use regex::Regex;
 use bytes::Bytes;
@@ -15,12 +13,14 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::env;
 use chrono::Utc;
-use std::ops::Div; // Import to use .div()
-use actix_web::{error::InternalError, HttpRequest, HttpResponse, Error};
-use log::{info, debug, error};
+use actix_web::{HttpRequest, HttpResponse, Error};
+use log::{debug, error};
 use sysinfo::{System, SystemExt};
 use crate::platform_variables::get_default_prompt_template;
 use std::process;
+use futures_util::stream::TryStreamExt;
+use tokio_stream::{wrappers::ReceiverStream, Stream};
+use futures::StreamExt;
 
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
@@ -108,9 +108,10 @@ async fn local_llm_response(
         .replace("{user_prompt}", full_user_prompt);
 
     let llm_server_url =  get_llm_server_url();
+    debug!("{}", full_prompt);
 
     let resp = client
-        .post(&format!("{}/completions", llm_server_url))
+        .post(&format!("{}/completions",  llm_server_url))
         .json(&json!({
             "prompt": full_prompt,
             "stream": true,
@@ -124,23 +125,18 @@ async fn local_llm_response(
     // Create a channel for streaming the response
     let (tx, rx) = mpsc::channel(100);
 
-    // Spawn a new task to handle the streaming of the response
     tokio::spawn(async move {
         let mut stream = resp.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(bytes) => {
-                    if tx.send(Ok(bytes)).await.is_err() {
-                        eprintln!("Receiver dropped");
-                        break;
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    break;
-                }
+    
+        while let Ok(Some(bytes)) = stream.try_next().await {
+            if tx.send(Ok(bytes)).await.is_err() {
+                eprintln!("Receiver dropped");
+                break;
             }
+        }
+    
+        if let Err(e) = stream.try_next().await {
+            let _ = tx.send(Err(e)).await;
         }
     });
 
