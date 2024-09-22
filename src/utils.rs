@@ -73,9 +73,11 @@ pub async fn handle_llm_response(
                         user_id, 
                         request_type).await {
             Ok(stream) => {
+                let formatted_stream = format_local_llm_response(stream, full_user_prompt, session_id, user_id).await;
+    
                 let response = HttpResponse::Ok()
                     .append_header(("X-Session-ID", session_id.to_string()))
-                    .streaming(stream);
+                    .streaming(formatted_stream);
                 return Ok(response);
             }
             Err(e) => {
@@ -210,17 +212,15 @@ async fn cloud_llm_response(
     Ok(ReceiverStream::new(rx))
 }
 
+use reqwest::Error as ReqwestError;
 
-
-pub async fn format_llmcpp_response(
-    stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Unpin,
+pub async fn format_local_llm_response(
+    stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
     user_prompt: &str,
     session_id: &str,
     user_id: &str,
-) -> impl Stream<Item = String> {
-    let full_response = String::new();
-
-    unfold((stream, full_response), |(mut stream, mut full_response)| async move {
+) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
+    unfold(stream, |mut stream| async move {
         if let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
@@ -234,14 +234,16 @@ pub async fn format_llmcpp_response(
                                     if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
                                         // Check for "content" and "stop" flags
                                         if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-                                            full_response.push_str(content);
+                                            // Convert content to bytes and send as result
+                                            let result = Ok(Bytes::from(content.to_string()));
 
-                                            // If "stop" flag is found, return the full response and end stream
+                                            // If "stop" flag is found, stop the stream
                                             if json_data.get("stop").is_some() {
-                                                return Some((full_response.clone(), (stream, full_response)));
+                                                return Some((result, stream)); // Stop after sending final content
                                             }
-                                            // Return the current content and continue
-                                            return Some((content.to_string(), (stream, full_response)));
+
+                                            // Return the current content as bytes
+                                            return Some((result, stream));
                                         }
                                     }
                                 }
@@ -254,7 +256,7 @@ pub async fn format_llmcpp_response(
                 }
                 Err(e) => {
                     eprintln!("Error receiving chunk: {}", e);
-                    return None;
+                    return Some((Err(e), stream));
                 }
             }
         }
@@ -263,7 +265,6 @@ pub async fn format_llmcpp_response(
         None
     })
 }
-
 
 pub fn calculate_cpu_usage(pid: u32, interval: Option<u64>) -> f64 {
     // Create a new process object
