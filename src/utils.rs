@@ -23,6 +23,7 @@ use tokio_stream::{wrappers::ReceiverStream, Stream};
 use futures::StreamExt;
 use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
+use crate::prompt_compression::compress::get_attention_scores;
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
     dotenv().ok(); // Load the .env file if it exists
@@ -256,8 +257,11 @@ pub async fn format_local_llm_response(
             // End of stream, print accumulated content
             if !acc.is_empty() {
                 debug!("Stream has ended: {}", acc);
+                let attention = get_attention_scores(&acc).await;
                 let embeddings = generate_text_embedding(&acc).await;
                 debug!("{:?}", embeddings);
+                debug!("{:?}", attention);
+
             }
             return None;
         }
