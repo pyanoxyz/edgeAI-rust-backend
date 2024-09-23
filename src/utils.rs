@@ -22,7 +22,7 @@ use futures_util::stream::TryStreamExt;
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use futures::StreamExt;
 use reqwest::Error as ReqwestError;
-
+use crate::embeddings::text_embeddings::generate_text_embedding;
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
     dotenv().ok(); // Load the .env file if it exists
@@ -255,7 +255,9 @@ pub async fn format_local_llm_response(
         } else {
             // End of stream, print accumulated content
             if !acc.is_empty() {
-                println!("Complete accumulated content: {}", acc);
+                debug!("Stream has ended: {}", acc);
+                let embeddings = generate_text_embedding(&acc).await;
+                debug!("{:?}", embeddings);
             }
             return None;
         }
@@ -263,100 +265,6 @@ pub async fn format_local_llm_response(
         Some((Ok(Bytes::new()), (stream, acc)))
     })
 }
-
-// pub async fn format_local_llm_response(
-//     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-//     user_prompt: &str,
-//     session_id: &str,
-//     user_id: &str,
-// ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
-//     let mut accumulated_content = String::new();
-
-//     unfold((stream, accumulated_content), |(mut stream, mut acc)| async move {
-//         if let Some(chunk_result) = stream.next().await {
-//             match chunk_result {
-//                 Ok(chunk) => {
-//                     if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-//                         for line in chunk_str.lines() {
-//                             if line.starts_with("data: ") {
-//                                 if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
-//                                     if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-//                                         acc.push_str(content);
-//                                     }
-//                                 }
-//                             }
-//                         }
-//                     } else {
-//                         eprintln!("Failed to parse chunk as UTF-8");
-//                     }
-//                     // Pass the chunk along the stream
-//                     Some((Ok(chunk), (stream, acc)))
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error receiving chunk: {}", e);
-//                     Some((Err(e), (stream, acc)))
-//                 }
-//             }
-//         } else {
-//             // End of stream, print accumulated content
-//             if !acc.is_empty() {
-//                 println!("Complete accumulated content: {}", acc);
-//             }
-//             None
-//         }
-//     })
-// }
-
-// pub async fn format_local_llm_response(
-//     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-//     user_prompt: &str,
-//     session_id: &str,
-//     user_id: &str,
-// ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
-//     unfold(stream, |mut stream| async move {
-//         if let Some(chunk_result) = stream.next().await {
-//             match chunk_result {
-//                 Ok(chunk) => {
-//                     // Attempt to convert bytes to a UTF-8 string
-//                     match std::str::from_utf8(&chunk) {
-//                         Ok(chunk_str) => {
-//                             // Process each line in the chunk
-//                             for line in chunk_str.lines() {
-//                                 if line.starts_with("data: ") {
-//                                     // Extract JSON from the line (skipping "data: ")
-//                                     if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
-//                                         // Check for "content" and "stop" flags
-//                                         if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-//                                             // Convert content to bytes and send as result
-//                                             let result = Ok(Bytes::from(content.to_string()));
-
-//                                             // If "stop" flag is found, stop the stream
-//                                             if json_data.get("stop").is_some() {
-//                                                 return Some((result, stream)); // Stop after sending final content
-//                                             }
-
-//                                             // Return the current content as bytes
-//                                             return Some((result, stream));
-//                                         }
-//                                     }
-//                                 }
-//                             }
-//                         }
-//                         Err(_) => {
-//                             eprintln!("Failed to parse chunk as UTF-8");
-//                         }
-//                     }
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error receiving chunk: {}", e);
-//                     return Some((Err(e), stream));
-//                 }
-//             }
-//         }
-//         // End the stream when no more chunks are available
-//         None
-//     })
-// }
 
 
 pub fn calculate_cpu_usage(pid: u32, interval: Option<u64>) -> f64 {

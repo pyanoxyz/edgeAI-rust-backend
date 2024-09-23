@@ -28,5 +28,4 @@ sqlite-vec = "0.1.2"
 rusqlite = "0.31"
 dirs = "5.0.1"
 zerocopy = "0.7.35"
-rust-bert = "0.22.0"
-tch = { version = "0.14", features = ["download-libtorch"] }
+fastembed = "4.0.0"
