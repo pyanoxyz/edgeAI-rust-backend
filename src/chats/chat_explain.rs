@@ -7,43 +7,44 @@ use crate::authentication::authorization::is_request_allowed;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct InfillRequest {
-    pub code_before: String,
-    pub code_after: String,
+pub struct ChatExplainRequest {
+    pub prompt: String,
     pub session_id: Option<String>,
 }
 
 const SYSTEM_PROMPT: &str = r#"
-    You are an expert code assistant specializing in predicting and generating code based on context. Analyze the given code context, 
-    determine the programming language, and suggest the most appropriate continuation. Adhere strictly to the following instructions:
-    1. Examine the CODE BEFORE section carefully and determine the programming language. Focus on understanding the code structure and logic.
-    2. Generate only new code that logically follows the CODE BEFORE section.
-    3. Do NOT generate any comments, explanations, or extra text. Your output should contain only executable code.
-    4. Avoid repeating any part of the CODE BEFORE section. If CODE AFTER is provided, ensure the new code fits logically between CODE BEFORE and CODE AFTER.
-    5. If CODE AFTER is empty, generate a logically complete structure (function, class, etc.) following best practices, ensuring correctness and optimal performance.
-    6. Prioritize readability and maintain consistent code style and indentation.
-    7. Re-assess incomplete patterns in the CODE BEFORE section and ensure the output forms a syntactically correct and executable code snippet.
-    8. Apply patterns for progressive task-solving by incrementally refining the solution and following a "least-to-most" decompositional approach when needed (as described in the research paper).
+   You are an expert code analyst specializing in breaking down code snippets and functions in a clear, step-by-step manner. \
+    Follow these guidelines for a detailed explanation:
+
+    1. **High-level overview**: Summarize the overall purpose of the code.
+    2. **Step-by-step breakdown**: Analyze each significant part, explaining its functionality and purpose.
+    3. **Algorithms/Design patterns**: Highlight key algorithms, data structures, or design patterns.
+    4. **Optimization/Improvements**: Suggest potential optimizations or improvements.
+    5. **Edge cases/Issues**: Identify possible issues or edge cases.
+    6. **Clarity**: Use clear, concise language suitable for all skill levels.
+
+    Structure your response with:
+    1. `ORIGINAL CODE` block.
+    2. **EXPLANATION**: Detailed breakdown.
+    3. **SUMMARY**: Brief conclusion.
+
+    Use triple backticks (```) for all code blocks.
+
     "#;
 
 const USER_PROMPT_TEMPLATE: &str = r#"
-    Please suggest ONLY the new code or comments that would logically follow after this context:
-    CODE BEFORE:
-    {code_before}
-
-    CODE AFTER:
-    {code_after}
-"#;
+        Context from prior conversations and uploaded files: {context}
+        New question or coding request: {user_prompt}
+    "#;
 
 
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(infill_code); // Register the correct route handler
+    cfg.service(chat_explain); // Register the correct route handler
 }
 
-#[post("/chat/infill")]
-pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let code_before = &data.code_before;
-    let code_after = &data.code_after;
+#[post("/chat/explain")]
+pub async fn chat_explain(data: web::Json<ChatExplainRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
+    let user_prompt = &data.prompt;
     // Check session and extract user ID from the request
     let session_id = match check_session(data.session_id.clone()) {
         Ok(id) => id,
@@ -55,8 +56,8 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
     };
 
     let full_user_prompt = USER_PROMPT_TEMPLATE
-        .replace("{code_before}", code_before)
-        .replace("{code_after}", code_after);
+        .replace("{context}", "")
+        .replace("{user_prompt}", user_prompt);
 
     match is_request_allowed(req.clone()).await {
         Ok(Some(user)) => {
@@ -89,8 +90,7 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
         }
         Err(e) => {
             // Error handling with InternalError response
-            error!("chat infill request failed {:?}", e);
-
+            error!("chat explain request failed {:?}", e);
             let err_response = InternalError::from_response("Request failed", e).into();
             Err(err_response)
         }

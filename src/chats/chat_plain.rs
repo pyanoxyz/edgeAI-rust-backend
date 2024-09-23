@@ -1,14 +1,11 @@
-use actix_web::{error::InternalError, get, post, web, HttpRequest, HttpResponse, Error};
-use std::env;
+use actix_web::{error::InternalError, post, web, HttpRequest, HttpResponse, Error};
 use crate::{request_type::RequestType, utils::handle_llm_response};
 use serde_json::json;
 use crate::session_manager::check_session;
-use dotenv::dotenv;
-use log::{info, debug, error};
+use log::{debug, error};
 use crate::authentication::authorization::is_request_allowed;
 use serde::{Deserialize, Serialize};
-
-
+use crate::database::chat_db::DB_INSTANCE;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatRequest {
@@ -93,6 +90,7 @@ pub async fn chat(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<Http
         }
         Err(e) => {
             // Error handling with InternalError response
+            error!("chat  request failed {:?}", e);
             let err_response = InternalError::from_response("Request failed", e).into();
             Err(err_response)
         }

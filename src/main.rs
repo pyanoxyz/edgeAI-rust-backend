@@ -10,6 +10,8 @@ mod utils;
 mod session_manager;
 mod request_type;
 mod platform_variables;
+mod database;
+mod embeddings;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -103,6 +105,7 @@ async fn main() -> std::io::Result<()> {
             .service(run_script)  // Register the GET route for running script
             .configure(chats::chat_fill_routes)  // Add chat_fill routes
             .configure(chats::chat_plain_routes)  // Add chat routes
+            .configure(chats::chat_explain_routes)  // Add chat explain routes
 
     })
     .bind("localhost:52556")?
