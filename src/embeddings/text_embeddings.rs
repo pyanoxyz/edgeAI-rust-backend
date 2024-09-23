@@ -1,19 +1,15 @@
-use std::fs::{self};
+use std::fs;
 use std::error::Error;
 use log::debug;
 use dirs;
 use std::path::{Path, PathBuf};
-use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
-
-
-// #[derive(Serialize, Deserialize)]
-// struct Embedding {
-//     data: Vec<f32>,
-// }
+use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsModel, SentenceEmbeddingsModelType};
+use tch::Device;
+use tokio::task;
 
 pub struct EmbeddingsManager {
     save_path: PathBuf,
-    model: Option<TextEmbedding>,
+    model: Option<SentenceEmbeddingsModel>,
 }
 impl EmbeddingsManager {
     // Constructor to create a new instance of EmbeddingsManager
@@ -25,31 +21,32 @@ impl EmbeddingsManager {
             model: None,
         }
     }
-    // Function to load the model to the specified directory
-    pub async fn load_model(&mut self) -> Result<(), Box<dyn Error>> {
+
+    // Function to load the model from the save path (cache) or download if not found
+    pub fn load_model(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let save_path = Path::new(&self.save_path);
         if !save_path.exists() {
             // Create the directory if it doesn't exist
             fs::create_dir_all(save_path)?;
         }
 
+        // Set the `HF_HOME` environment variable to customize the cache directory
+        std::env::set_var("HF_HOME", self.save_path.to_str().unwrap());
 
-        // Setting up the InitOptions with model_name and cache_dir
-        let init_options = InitOptions::new(EmbeddingModel::AllMiniLML12V2)
-            .with_cache_dir(self.save_path.clone()); // Set cache directory
-
-        // Load model using the custom InitOptions
-        let model = TextEmbedding::try_new(init_options)?;
+        // Create the model
+        let model = SentenceEmbeddingsBuilder::remote(SentenceEmbeddingsModelType::AllMiniLmL6V2)
+            .with_device(Device::Cpu) // You can change this to Cuda if you have a GPU
+            .create_model()?;
 
         self.model = Some(model);
-        debug!("Model loaded and saved to {} successfully.", save_path.display());
+        debug!("Model loaded successfully from {}.", save_path.display());
         Ok(())
     }
 
     // Function to create text embeddings
-    pub fn create_text_embedding(&self, text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
+    pub fn create_text_embedding(&self, text: &str) -> Result<Vec<f32>, Box<dyn Error + Send + Sync>> {
         if let Some(ref model) = self.model {
-            let embeddings = model.embed(vec![text], None)?;
+            let embeddings = model.encode(&[text])?;  // Encode the text using the Sentence Embeddings model
             Ok(embeddings[0].clone())
         } else {
             Err(Box::from("Model is not loaded"))
@@ -58,14 +55,20 @@ impl EmbeddingsManager {
 }
 
 // Function to create embeddings for a given text, which can be imported from other modules
-pub async fn generate_text_embedding(text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
-    // Create the model manager instance
-    let mut model_manager = EmbeddingsManager::new(".pyano/models");
+pub async fn generate_text_embedding(text: &str) -> Result<Vec<f32>, Box<dyn Error +Send +Sync>> {
+    // Spawn the blocking task to avoid blocking the async runtime
+    let text_owned = text.to_string();
 
-    // Load the model (this will download the model if it’s not already saved)
-    model_manager.load_model().await?;
+    let embedding = task::spawn_blocking(move || {
+        let mut model_manager = EmbeddingsManager::new(".pyano/models");
 
-    // Create text embedding for the given sentence
-    let embedding = model_manager.create_text_embedding(text)?;
+        // Load the model (this will download the model if it's not already saved)
+        model_manager.load_model()?;
+
+        // Create text embedding for the given sentence
+        model_manager.create_text_embedding(&text_owned)
+    })
+    .await??;
+
     Ok(embedding)
 }

@@ -13,6 +13,7 @@ mod platform_variables;
 mod database;
 mod embeddings;
 mod rerank;
+mod prompt_compression;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
