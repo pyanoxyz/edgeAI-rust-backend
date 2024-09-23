@@ -3,19 +3,13 @@ use std::error::Error;
 use log::debug;
 use dirs;
 use std::path::{Path, PathBuf};
-use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
+use fastembed::{TextRerank, RerankInitOptions, RerankerModel, RerankResult};
 
-
-// #[derive(Serialize, Deserialize)]
-// struct Embedding {
-//     data: Vec<f32>,
-// }
-
-pub struct EmbeddingsManager {
+pub struct RerankManager {
     save_path: PathBuf,
-    model: Option<TextEmbedding>,
+    model: Option<TextRerank>,
 }
-impl EmbeddingsManager {
+impl RerankManager {
     // Constructor to create a new instance of EmbeddingsManager
     pub fn new(save_path: &str) -> Self {
         let home_dir = dirs::home_dir().expect("Unable to get home directory");
@@ -35,22 +29,22 @@ impl EmbeddingsManager {
 
 
         // Setting up the InitOptions with model_name and cache_dir
-        let init_options = InitOptions::new(EmbeddingModel::AllMiniLML12V2)
+        let init_options = RerankInitOptions::new(RerankerModel::BGERerankerBase)
             .with_cache_dir(self.save_path.clone()); // Set cache directory
 
         // Load model using the custom InitOptions
-        let model = TextEmbedding::try_new(init_options)?;
+        let model = TextRerank::try_new(init_options)?;
 
         self.model = Some(model);
-        debug!("Model loaded and saved to {} successfully.", save_path.display());
+        debug!("Rerank Model loaded and saved to {} successfully.", save_path.display());
         Ok(())
     }
 
-    // Function to create text embeddings
-    pub fn create_text_embedding(&self, text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
+    pub fn rerank_documents(&self, query: &str, documents: Vec<&str>) -> Result<Vec<RerankResult>, Box<dyn Error>> {
         if let Some(ref model) = self.model {
-            let embeddings = model.embed(vec![text], None)?;
-            Ok(embeddings[0].clone())
+            let results = model.rerank(query, documents, true, None)?;
+        
+            Ok(results)
         } else {
             Err(Box::from("Model is not loaded"))
         }
@@ -58,14 +52,15 @@ impl EmbeddingsManager {
 }
 
 // Function to create embeddings for a given text, which can be imported from other modules
-pub async fn generate_text_embedding(text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
+pub async fn rerank_documents(query: &str, documents: Vec<&str>) -> Result<Vec<RerankResult>, Box<dyn Error>> {
     // Create the model manager instance
-    let mut model_manager = EmbeddingsManager::new(".pyano/models");
+    let mut model_manager = RerankManager::new(".pyano/models");
 
     // Load the model (this will download the model if it’s not already saved)
     model_manager.load_model().await?;
 
     // Create text embedding for the given sentence
-    let embedding = model_manager.create_text_embedding(text)?;
-    Ok(embedding)
+    let reranked_documents = model_manager.rerank_documents(query, documents)?;
+    debug!("Documents has been rerabked {:?}", reranked_documents);
+    Ok(reranked_documents)
 }
