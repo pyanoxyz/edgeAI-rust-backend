@@ -2,25 +2,17 @@
 use rusqlite::{ffi::sqlite3_auto_extension, Connection, Result};
 use sqlite_vec::sqlite3_vec_init;
 use std::fs;
-use log::debug;
+use log::{debug, info};
 use std::path::PathBuf;
 use chrono::Utc; // For getting the current UTC timestamp
-use std::io::prelude::*;
 use dirs;
 use std::sync::Mutex;
 use rusqlite::params;
 use zerocopy::AsBytes;
+use uuid::Uuid;
 
-struct PyanoDBConfig{
+pub struct PyanoDBConfig{
     pub pyano_db_file: PathBuf
-}
-
-// Function to register the sqlite-vec extension
-fn register_sqlite_vec(connection: &Connection) -> Result<()> {
-    unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
-    }
-    Ok(())
 }
 
 impl PyanoDBConfig{
@@ -43,31 +35,49 @@ impl PyanoDBConfig{
 pub struct PyanoDB {
     connection: Mutex<Connection>,  // Wrapping the connection in Mutex for thread-safe access
 }
-    
 
 impl PyanoDB {
     // Function to create a new database connection (or open existing one)
     pub fn new(config: &PyanoDBConfig) -> Self {
-        let connection = Connection::open(&config.pyano_db_file).unwrap();
-                
         // Register the sqlite-vec extension to support vector operations
-        register_sqlite_vec(&connection).unwrap();
+        unsafe {
+            sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
+        }        
+        let connection = Connection::open(&config.pyano_db_file).unwrap();
 
         connection.execute(
             "
-            CREATE virtual table chats using vec0 (
-                id INTEGER PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS chats (
+                id TEXT PRIMARY KEY,  -- UUID as primary key
                 user_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
                 prompt TEXT,
                 compressed_prompt TEXT,
                 response TEXT,
-                embeddings float[512],
-                timestamp TEXT  -- Store UTC timestamp as TEXT
+                timestamp TEXT,
+                request_type TEXT
             );
             ",
             [],  // Empty array for parameters since none are needed
         ).unwrap();
+        // Check if the 'chat_embeddings' virtual table already exists
+        let table_exists: bool = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='chat_embeddings';",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0) > 0;
+
+        // Create the 'chat_embeddings' table only if it doesn't exist
+        if !table_exists {
+        connection.execute(
+            "
+            CREATE VIRTUAL TABLE chat_embeddings USING vec0 (id TEXT PRIMARY KEY, embeddings float[384]);
+            ",
+            [],
+        ).unwrap();
+        }
 
         PyanoDB {
             connection: Mutex::new(connection),  // Wrapping the connection
@@ -75,88 +85,42 @@ impl PyanoDB {
     }
     
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
-    pub fn store(&self, user_id: &str, session_id: &str, prompt: &str, compressed_prompt: &str, response: &str, embeddings: &[f32]) {
+    pub fn store(&self, user_id: &str, session_id: &str, prompt: &str, compressed_prompt: &str, response: &str, embeddings: &[f32], request_type: &str) {
         
          // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
+        let uuid = Uuid::new_v4().to_string();
 
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
 
 
         connection.execute(
-            "INSERT INTO chats (user_id, session_id, prompt, compressed_prompt, response, embeddings, timestamp)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO chats (id, user_id, session_id, prompt, compressed_prompt, response, timestamp, request_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             params![
+                uuid,
                 user_id,
                 session_id,
                 prompt,
                 compressed_prompt,
                 response,
-                embeddings.as_bytes(),  // Store embeddings as a BLOB
-                timestamp.as_str(),      // Store UTC timestamp as TEXT
+                timestamp.as_str(),
+                request_type     // Store UTC timestamp as TEXT
             ],
         ).unwrap();
+
+        connection.execute(
+            "INSERT INTO chat_embeddings (id, embeddings)
+             VALUES (?, ?)",
+            params![
+                uuid,
+                embeddings.as_bytes()         
+                ],
+        ).unwrap();
+
     }
-    // // Function to query chat records along with embeddings
-    // pub fn query_chats(&self) {
-    //     let mut statement = self
-    //         .connection
-    //         .prepare("SELECT id, user_id, session_id, prompt, response, embeddings, timestamp FROM chats")
-    //         .unwrap();
-
-    //     while let State::Row = statement.next().unwrap() {
-    //         let id: i64 = statement.read(0).unwrap();
-    //         let user_id: String = statement.read(1).unwrap();
-    //         let session_id: String = statement.read(2).unwrap();
-    //         let prompt: String = statement.read(3).unwrap();
-    //         let response: String = statement.read(4).unwrap();
-            
-    //         // Read embeddings as VECTOR
-    //         let embeddings: Vec<f32> = statement.read::<Vec<f32>>(5).unwrap();
-    //         let timestamp: String = statement.read(6).unwrap();
-
-    //         println!(
-    //             "ID: {}, User ID: {}, Session ID: {}, Prompt: {}, Response: {}, Embeddings: {:?}, Timestamp: {}",
-    //             id, user_id, session_id, prompt, response, embeddings, timestamp
-    //         );
-    //     }
-    // }
-    //  // Function to find the most similar embeddings using cosine similarity
-    //  pub fn find_similar(&self, query_embedding: &[f32], top_k: i64) {
-    //     let mut statement = self
-    //         .connection
-    //         .prepare(
-    //             "
-    //             SELECT id, user_id, session_id, prompt, response, embeddings, timestamp,
-    //                 vec_cosine_similarity(embeddings, ?) AS similarity
-    //             FROM chats
-    //             ORDER BY similarity DESC
-    //             LIMIT ?;
-    //         ",
-    //         )
-    //         .unwrap();
-
-    //     statement.bind(1, query_embedding).unwrap();
-    //     statement.bind(2, top_k).unwrap();
-
-    //     while let State::Row = statement.next().unwrap() {
-    //         let id: i64 = statement.read(0).unwrap();
-    //         let user_id: String = statement.read(1).unwrap();
-    //         let session_id: String = statement.read(2).unwrap();
-    //         let prompt: String = statement.read(3).unwrap();
-    //         let response: String = statement.read(4).unwrap();
-    //         let embeddings: Vec<f32> = statement.read::<Vec<f32>>(5).unwrap();
-    //         let timestamp: String = statement.read(6).unwrap();
-    //         let similarity: f32 = statement.read(7).unwrap();
-
-    //         println!(
-    //             "ID: {}, User ID: {}, Session ID: {}, Prompt: {}, Response: {}, Embeddings: {:?}, Similarity: {}, Timestamp: {}",
-    //             id, user_id, session_id, prompt, response, embeddings, similarity, timestamp
-    //         );
-    //     }
-    // }
-
+   
     // Example of how to use the RwLock for reading
     pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>> {
         let connection = self.connection.lock().unwrap();
@@ -167,8 +131,7 @@ impl PyanoDB {
                 distance,
                 prompt,
                 compressed_prompt,
-                response,
-
+                response
             FROM chats
             WHERE embeddings MATCH ?1
             ORDER BY distance
@@ -186,6 +149,8 @@ impl PyanoDB {
 }
 // Create a singleton instance of the database connection
 use once_cell::sync::Lazy;
+
+use crate::request_type;
 
 pub static DB_INSTANCE: Lazy<PyanoDB> = Lazy::new(|| {
     let config = PyanoDBConfig::new();

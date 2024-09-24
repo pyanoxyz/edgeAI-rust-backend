@@ -1,5 +1,5 @@
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RequestType {
     Infill,
     Chat,
@@ -15,6 +15,14 @@ impl RequestType {
             RequestType::Chat => "CHAT",
             RequestType::Refactor => "REFACTOR",
             RequestType::TestCases => "TEST_CASES",
+        }
+    }
+    pub fn to_string(&self) -> String {
+        match self {
+            RequestType::Infill => "Text".to_string(),
+            RequestType::Chat => "Chat".to_string(),
+            RequestType::Refactor => "Refactor".to_string(),
+            RequestType::TestCases => "TestCases".to_string(),
         }
     }
 }

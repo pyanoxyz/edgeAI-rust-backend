@@ -6,6 +6,7 @@ use regex::Regex;
 use bytes::Bytes;
 use futures::stream::unfold;
 use serde_json::Value;
+use crate::embeddings;
 use crate::request_type::RequestType;
 use dotenv::dotenv;
 use psutil::process::Process;
@@ -24,6 +25,9 @@ use futures::StreamExt;
 use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
+use crate::database::chat_db::DB_INSTANCE;
+use std::sync::Arc;
+
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
     dotenv().ok(); // Load the .env file if it exists
@@ -73,9 +77,24 @@ pub async fn handle_llm_response(
                         0.2, 
                         session_id, 
                         user_id, 
-                        request_type).await {
+                        &request_type.to_string().clone()).await {
             Ok(stream) => {
-                let formatted_stream = format_local_llm_response(stream, full_user_prompt, session_id, user_id).await;
+                let full_user_prompt_owned = Arc::new(full_user_prompt.to_owned());
+                let session_id_owned = Arc::new(session_id.to_owned());
+                let user_id_owned = Arc::new(user_id.to_owned());
+                let request_type_owned = Arc::new(request_type.to_string().to_owned());  // Here, `request_type` is moved
+
+                // Clone request_type if you need to use it later
+                // let request_type_clone = request_type.clone();
+                            
+
+        let formatted_stream = format_local_llm_response(
+            stream,
+            full_user_prompt_owned.clone(), // Clone Arc for shared ownership
+            session_id_owned.clone(),
+            user_id_owned.clone(),
+            request_type_owned.clone()
+        ).await;
     
                 let response = HttpResponse::Ok()
                     .append_header(("X-Session-ID", session_id.to_string()))
@@ -99,7 +118,7 @@ async fn local_llm_response(
     temperature: f64,
     session_id: &str,
     user_id: &str,
-    request_type: RequestType
+    request_type: &str
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
     let client = Client::new();
     debug!("Pinging Local LLM server");
@@ -213,66 +232,88 @@ async fn cloud_llm_response(
     // Return the receiver as a stream
     Ok(ReceiverStream::new(rx))
 }
-
-
 pub async fn format_local_llm_response(
     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-    user_prompt: &str,
-    session_id: &str,
-    user_id: &str,
+    user_prompt: Arc<String>,    // Now wrapped in Arc for shared ownership
+    session_id: Arc<String>,     // Wrapped in Arc
+    user_id: Arc<String>,
+    request_type: Arc<String>      // Wrapped in Arc
 ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
     let mut accumulated_content = String::new();
 
-    unfold((stream, accumulated_content), |(mut stream, mut acc)| async move {
-        if let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                        let mut content_to_stream = String::new();
-                        for line in chunk_str.lines() {
-                            if line.starts_with("data: ") {
-                                if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
-                                    if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-                                        acc.push_str(content); // Accumulate content
-                                        content_to_stream.push_str(content); // Stream content
+    unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
+        // The cloning should happen inside the async block
+        let user_id_cloned = Arc::clone(&user_id);
+        let session_id_cloned = Arc::clone(&session_id);
+        let user_prompt_cloned = Arc::clone(&user_prompt);
+        let request_type_cloned = Arc::clone(&request_type);
+
+        async move {
+            if let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(chunk) => {
+                        if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+                            let mut content_to_stream = String::new();
+                            for line in chunk_str.lines() {
+                                if line.starts_with("data: ") {
+                                    if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
+                                        if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
+                                            acc.push_str(content); // Accumulate content
+                                            content_to_stream.push_str(content); // Stream content
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        if !content_to_stream.is_empty() {
-                            // Stream the content that was extracted
-                            return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
+                            if !content_to_stream.is_empty() {
+                                // Stream the content that was extracted
+                                return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
+                            }
+                        } else {
+                            eprintln!("Failed to parse chunk as UTF-8");
                         }
-                    } else {
-                        eprintln!("Failed to parse chunk as UTF-8");
+                    }
+                    Err(e) => {
+                        eprintln!("Error receiving chunk: {}", e);
+                        return Some((Err(e), (stream, acc)));
                     }
                 }
-                Err(e) => {
-                    eprintln!("Error receiving chunk: {}", e);
-                    return Some((Err(e), (stream, acc)));
+            } else {
+                // End of stream, process accumulated content
+                if !acc.is_empty() {
+                    debug!("Stream has ended: {}", acc);
+                    let result = get_attention_scores(&acc).await;
+
+                    let (tokens, _) = match result {
+                        Ok((tokens, attention_scores)) => (tokens, attention_scores),
+                        Err(_) => return None, // Convert the error to None
+                    };
+                    let embeddings_result = generate_text_embedding(&acc).await;
+                    
+                    // Extract embeddings if the result is Ok, otherwise return None
+                    let embeddings = match embeddings_result {
+                        Ok(embeddings) => embeddings,
+                        Err(_) => return None,
+                    };
+                    debug!("{:?}", embeddings);
+                    let compressed_prompt = tokens.join(" ");
+                    debug!("Compressed Prompt {:?}", compressed_prompt);
+                    DB_INSTANCE.store(
+                        &user_id_cloned, 
+                        &session_id_cloned, 
+                        &user_prompt_cloned, 
+                        &compressed_prompt, 
+                        &acc, 
+                        &embeddings[..],
+                        &request_type_cloned
+                    );
+
                 }
+                return None;
             }
-        } else {
-            // End of stream, print accumulated content
-            if !acc.is_empty() {
-                debug!("Stream has ended: {}", acc);
-                let result = get_attention_scores(&acc).await;
-
-                let (tokens, _) = match result {
-                    Ok((tokens, attention_scores)) => (tokens, attention_scores),
-                    Err(_) => return None, // Convert the error to None
-                };
-                let embeddings = generate_text_embedding(&acc).await;
-                debug!("{:?}", embeddings);
-                let compressed_prompt = tokens.join(" ");
-                debug!("Compressed Prompt {:?}", compressed_prompt);
-
-            }
-            return None;
+            // In case there was no content to stream, continue to the next chunk
+            Some((Ok(Bytes::new()), (stream, acc)))
         }
-        // In case there was no content to stream, continue to the next chunk
-        Some((Ok(Bytes::new()), (stream, acc)))
     })
 }
 
