@@ -110,9 +110,11 @@ async fn main() -> std::io::Result<()> {
             .configure(chats::chat_plain_routes)  // Add chat routes
             .configure(chats::chat_explain_routes)  // Add chat explain routes
             .configure(chats::chat_explain_routes)  // Add chat explain routes
+            .configure(chats::chat_refactor_routes)  // Add chat refactor routes
+            .configure(chats::chat_testcases_routes)  // Add chat testcases routes
+            .configure(chats::chat_findbugs_routes)  // Add chatfindbugs routes
+            .configure(chats::chat_docstring_routes)  // Add docstring routes
             .configure(history::histoy_register_routes)  // Add chat explain routes
-
-
     })
     .bind("localhost:52556")?
     .run()

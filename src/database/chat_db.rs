@@ -85,7 +85,7 @@ impl DBConfig{
         chats
     }
 
-    pub fn fetch_chats_for_session_and_user(&self, session_id: &str, user_id: &str) -> Vec<(String, String, String, String, String, String, String)> {
+    pub fn fetch_chats_for_session_and_user(&self, session_id: &str, user_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
     
@@ -100,20 +100,20 @@ impl DBConfig{
             .unwrap();
     
         // Create a vector to hold the chat entries
-        let mut chats: Vec<(String, String, String, String, String, String, String)> = Vec::new();
+        let mut chats: Vec<Value> = Vec::new();
     
         // Execute the query and iterate over the rows, collecting them into the vector
         let chat_iter = stmt
             .query_map([session_id, user_id], |row| {
-                Ok((
-                    row.get(0)?,  // id
-                    row.get(1)?,  // user_id
-                    row.get(2)?,  // session_id
-                    row.get(3)?,  // prompt
-                    row.get(4)?,  // compressed_prompt
-                    row.get(5)?,  // response
-                    row.get(6)?,  // timestamp
-                ))
+                Ok(json!({
+                    "id": row.get::<_, String>(0)?,  // id
+                    "user_id": row.get::<_, String>(1)?,  // user_id
+                    "session_id": row.get::<_, String>(2)?,  // session_id
+                    "prompt": row.get::<_, String>(3)?,  // prompt
+                    "compressed_prompt": row.get::<_, String>(4)?,  // compressed_prompt
+                    "response": row.get::<_, String>(5)?,  // response
+                    "timestamp": row.get::<_, String>(6)?,  // timestamp
+                }))
             })
             .unwrap();
     

@@ -1,9 +1,5 @@
-use actix_web::{error::InternalError, post, web, HttpRequest, HttpResponse, Error};
-use crate::{request_type::RequestType, utils::handle_llm_response};
-use serde_json::json;
-use crate::session_manager::check_session;
-use log::{debug, error};
-use crate::authentication::authorization::is_request_allowed;
+use actix_web::{post, web, HttpRequest, HttpResponse, Error};
+use crate::chats::chat_struct::{RefactorPrompt, handle_request};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,57 +39,10 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 
 #[post("/chat")]
 pub async fn chat(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let user_prompt = &data.prompt;
-    // Check session and extract user ID from the request
-    let session_id = match check_session(data.session_id.clone()) {
-        Ok(id) => id,
-        Err(e) => {
-            return Err(actix_web::error::ErrorInternalServerError(json!({
-                "error": e.to_string()
-            })));
-        }
-    };
-
-    let full_user_prompt = USER_PROMPT_TEMPLATE
-        .replace("{context}", "")
-        .replace("{user_prompt}", user_prompt);
-
-    match is_request_allowed(req.clone()).await {
-        Ok(Some(user)) => {
-            debug!("Ok reached here");
-
-            // Cloud LLM response with actual user ID
-            handle_llm_response(
-                Some(req),
-                SYSTEM_PROMPT,
-                &user_prompt,
-                &full_user_prompt,
-                &session_id,
-                &user.user_id, // Using actual user ID from request
-                RequestType::Infill,
-            )
-            .await
-        }
-        Ok(None) => {
-            debug!("Local llm being executed with session_id {}", session_id);
-
-            // Local LLM response (no user info available)
-            handle_llm_response(
-                None,
-                SYSTEM_PROMPT,
-                &user_prompt,
-                &full_user_prompt,
-                &session_id,
-                "user_id", // Placeholder user_id for local execution
-                RequestType::Infill,
-            )
-            .await
-        }
-        Err(e) => {
-            // Error handling with InternalError response
-            error!("chat  request failed {:?}", e);
-            let err_response = InternalError::from_response("Request failed", e).into();
-            Err(err_response)
-        }
+        let prompt = RefactorPrompt::new(
+            SYSTEM_PROMPT,
+            USER_PROMPT_TEMPLATE,
+        );
+    
+        handle_request(&prompt, &data.prompt, data.session_id.clone(), Some(req)).await
     }
-}
