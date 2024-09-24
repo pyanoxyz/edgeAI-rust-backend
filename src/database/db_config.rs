@@ -1,0 +1,84 @@
+
+use rusqlite::{ffi::sqlite3_auto_extension, Connection};
+use sqlite_vec::sqlite3_vec_init;
+use std::fs;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+pub struct DBConfig {
+    pub connection: Mutex<Connection>,  // Wrapping the connection in Mutex for thread-safe access
+}
+
+impl DBConfig {
+    // Function to create a new database connection (or open existing one)
+    pub fn new() -> Self {
+        let home_directory = dirs::home_dir().unwrap();
+        let root_pyano_dir = home_directory.join(".pyano");
+        let pyano_data_dir = root_pyano_dir.join("database");
+        if !pyano_data_dir.exists() {
+            fs::create_dir_all(&pyano_data_dir).unwrap();
+        }
+        let pyano_db_file = pyano_data_dir.join("chats.db");
+        // Register the sqlite-vec extension to support vector operations
+        unsafe {
+            sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
+        }        
+        let connection: Connection = Connection::open(&pyano_db_file).unwrap();
+
+        let db_config = DBConfig {
+            connection: Mutex::new(connection),  // Wrapping the connection
+        };
+
+        db_config.create_chat_table();
+        db_config.create_chat_embeddings();
+        db_config
+    }
+    
+    pub fn create_chat_table(&self){
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS chats (
+                id TEXT PRIMARY KEY,  -- UUID as primary key
+                user_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                prompt TEXT,
+                compressed_prompt TEXT,
+                response TEXT,
+                timestamp TEXT,
+                request_type TEXT
+            );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
+    pub fn create_chat_embeddings(&self){
+        let connection = self.connection.lock().unwrap();
+        let table_exists: bool = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='chat_embeddings';",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0) > 0;
+
+        // Create the 'chat_embeddings' table only if it doesn't exist
+        if !table_exists {
+        connection.execute(
+            "
+            CREATE VIRTUAL TABLE chat_embeddings USING vec0 (id TEXT PRIMARY KEY, embeddings float[384]);
+            ",
+            [],
+        ).unwrap();
+        }
+    }
+
+
+    
+}
+// Create a singleton instance of the database connection
+
+pub static DB_INSTANCE: Lazy<DBConfig> = Lazy::new(|| {
+    DBConfig::new()
+});

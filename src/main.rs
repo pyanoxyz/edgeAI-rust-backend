@@ -14,6 +14,7 @@ mod database;
 mod embeddings;
 mod rerank;
 mod prompt_compression;
+mod history;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -108,6 +109,9 @@ async fn main() -> std::io::Result<()> {
             .configure(chats::chat_fill_routes)  // Add chat_fill routes
             .configure(chats::chat_plain_routes)  // Add chat routes
             .configure(chats::chat_explain_routes)  // Add chat explain routes
+            .configure(chats::chat_explain_routes)  // Add chat explain routes
+            .configure(history::histoy_register_routes)  // Add chat explain routes
+
 
     })
     .bind("localhost:52556")?

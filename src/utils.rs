@@ -25,7 +25,7 @@ use futures::StreamExt;
 use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
-use crate::database::chat_db::DB_INSTANCE;
+use crate::database::db_config::DB_INSTANCE;
 use std::sync::Arc;
 
 // Function to read the CLOUD_EXECUTION_MODE from the environment
@@ -48,6 +48,7 @@ pub fn get_llm_server_url() -> String {
 pub async fn handle_llm_response(
     req: Option<HttpRequest>,
     system_prompt: &str,
+    prompt: &str,
     full_user_prompt: &str,
     session_id: &str,
     user_id: &str,
@@ -55,7 +56,7 @@ pub async fn handle_llm_response(
 ) -> Result<HttpResponse, Error> {
     if let Some(req) = req {
         // If the request exists, handle cloud LLM response
-        match cloud_llm_response(system_prompt, full_user_prompt, session_id, user_id, request_type).await {
+        match cloud_llm_response(system_prompt, full_user_prompt).await {
             Ok(stream) => {
                 let response = HttpResponse::Ok()
                     .append_header(("X-Session-ID", session_id.to_string()))
@@ -74,12 +75,9 @@ pub async fn handle_llm_response(
 
         match local_llm_response(system_prompt,
                         full_user_prompt, 
-                        0.2, 
-                        session_id, 
-                        user_id, 
-                        &request_type.to_string().clone()).await {
+                        0.2).await {
             Ok(stream) => {
-                let full_user_prompt_owned = Arc::new(full_user_prompt.to_owned());
+                let prompt_owned = Arc::new(prompt.to_owned());
                 let session_id_owned = Arc::new(session_id.to_owned());
                 let user_id_owned = Arc::new(user_id.to_owned());
                 let request_type_owned = Arc::new(request_type.to_string().to_owned());  // Here, `request_type` is moved
@@ -90,7 +88,7 @@ pub async fn handle_llm_response(
 
         let formatted_stream = format_local_llm_response(
             stream,
-            full_user_prompt_owned.clone(), // Clone Arc for shared ownership
+            prompt_owned.clone(), // Clone Arc for shared ownership
             session_id_owned.clone(),
             user_id_owned.clone(),
             request_type_owned.clone()
@@ -116,9 +114,7 @@ async fn local_llm_response(
     system_prompt: &str,
     full_user_prompt: &str,
     temperature: f64,
-    session_id: &str,
-    user_id: &str,
-    request_type: &str
+
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
     let client = Client::new();
     debug!("Pinging Local LLM server");
@@ -171,9 +167,6 @@ async fn local_llm_response(
 async fn cloud_llm_response(
     system_prompt: &str,
     full_user_prompt: &str,
-    session_id: &str,
-    user_id: &str,
-    request_type: RequestType,
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
     let api_url = "https://api.together.xyz/v1/chat/completions";
     let api_key = std::env::var("TOGETHER_API_KEY")?;  // Fetch the API key from env variables
@@ -298,7 +291,8 @@ pub async fn format_local_llm_response(
                     debug!("{:?}", embeddings);
                     let compressed_prompt = tokens.join(" ");
                     debug!("Compressed Prompt {:?}", compressed_prompt);
-                    DB_INSTANCE.store(
+
+                    DB_INSTANCE.store_chats(
                         &user_id_cloned, 
                         &session_id_cloned, 
                         &user_prompt_cloned, 

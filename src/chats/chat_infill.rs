@@ -66,6 +66,7 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
             handle_llm_response(
                 Some(req),
                 SYSTEM_PROMPT,
+                &code_before,
                 &full_user_prompt,
                 &session_id,
                 &user.user_id, // Using actual user ID from request
@@ -80,6 +81,7 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
             handle_llm_response(
                 None,
                 SYSTEM_PROMPT,
+                &code_before,
                 &full_user_prompt,
                 &session_id,
                 "user_id", // Placeholder user_id for local execution

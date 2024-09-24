@@ -5,7 +5,6 @@ use crate::session_manager::check_session;
 use log::{debug, error};
 use crate::authentication::authorization::is_request_allowed;
 use serde::{Deserialize, Serialize};
-use crate::database::chat_db::DB_INSTANCE;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatRequest {
@@ -67,6 +66,7 @@ pub async fn chat(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<Http
             handle_llm_response(
                 Some(req),
                 SYSTEM_PROMPT,
+                &user_prompt,
                 &full_user_prompt,
                 &session_id,
                 &user.user_id, // Using actual user ID from request
@@ -81,6 +81,7 @@ pub async fn chat(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<Http
             handle_llm_response(
                 None,
                 SYSTEM_PROMPT,
+                &user_prompt,
                 &full_user_prompt,
                 &session_id,
                 "user_id", // Placeholder user_id for local execution

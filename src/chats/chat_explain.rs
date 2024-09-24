@@ -67,6 +67,7 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, req: HttpRequest)
             handle_llm_response(
                 Some(req),
                 SYSTEM_PROMPT,
+                &user_prompt,
                 &full_user_prompt,
                 &session_id,
                 &user.user_id, // Using actual user ID from request
@@ -81,6 +82,7 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, req: HttpRequest)
             handle_llm_response(
                 None,
                 SYSTEM_PROMPT,
+                &user_prompt,
                 &full_user_prompt,
                 &session_id,
                 "user_id", // Placeholder user_id for local execution
