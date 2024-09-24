@@ -126,56 +126,56 @@ impl AttentionCalculator {
 
 
 fn download_and_save_model(save_path: &str) -> Result<()> {
-    // Check if the model already exists and has contents
-    let distillbert_dir = format!("{}/bert-bert-uncased", save_path);
-
-    // Create the directory if it doesn't exist
-    if !Path::new(&distillbert_dir).exists() {
-        create_dir_all(&distillbert_dir)?;
-        println!("Created directory: {}", distillbert_dir);
-    }
-    println!("Downloading and saving model to {}...", save_path);
-
-    // Downloading config, vocab, and weights
-    // Downloading config, vocab, and weights for BERT-base-uncased
-    let config_resource = RemoteResource::from_pretrained(rust_bert::bert::BertConfigResources::BERT);
-    let vocab_resource = RemoteResource::from_pretrained(rust_bert::bert::BertVocabResources::BERT);
-    let weights_resource = RemoteResource::from_pretrained(rust_bert::bert::BertModelResources::BERT);
-
-    // Save the resources locally if not already present
-    let config_path = config_resource.get_local_path()?;
-    let vocab_path = vocab_resource.get_local_path()?;
-    let weights_path = weights_resource.get_local_path()?;
-
-    // Check if config, vocab, or weights files exist before copying
+    // Define paths for config, vocab, and weights
     let config_dest = format!("{}/bert-bert-uncased/config.json", save_path);
     let vocab_dest = format!("{}/bert-bert-uncased/vocab.txt", save_path);
     let weights_dest = format!("{}/bert-bert-uncased/model.ot", save_path);
 
+    // Check if any of the model files (config, vocab, weights) already exist
+    if Path::new(&config_dest).exists() && Path::new(&vocab_dest).exists() && Path::new(&weights_dest).exists() {
+        debug!("Prompt compression model files already exists at {}. Skipping download.", save_path);
+        return Ok(());
+    }
+
+    // Create the directory if it doesn't exist
+    let distillbert_dir = format!("{}/bert-bert-uncased", save_path);
+    if !Path::new(&distillbert_dir).exists() {
+        create_dir_all(&distillbert_dir)?;
+        debug!("Created directory: {}", distillbert_dir);
+    }
+
+    // Downloading config, vocab, and weights only if they don't exist
     if !Path::new(&config_dest).exists() {
+        let config_resource = RemoteResource::from_pretrained(rust_bert::bert::BertConfigResources::BERT);
+        let config_path = config_resource.get_local_path()?;
         fs::copy(config_path, &config_dest)?;
-        println!("Config saved to {}", config_dest);
+        debug!("Config saved to {}", config_dest);
     } else {
-        println!("Config already exists at {}. Skipping.", config_dest);
+        debug!("Config already exists at {}. Skipping.", config_dest);
     }
 
     if !Path::new(&vocab_dest).exists() {
+        let vocab_resource = RemoteResource::from_pretrained(rust_bert::bert::BertVocabResources::BERT);
+        let vocab_path = vocab_resource.get_local_path()?;
         fs::copy(vocab_path, &vocab_dest)?;
-        println!("Vocab saved to {}", vocab_dest);
+        debug!("Vocab saved to {}", vocab_dest);
     } else {
-        println!("Vocab already exists at {}. Skipping.", vocab_dest);
+        debug!("Vocab already exists at {}. Skipping.", vocab_dest);
     }
 
     if !Path::new(&weights_dest).exists() {
+        let weights_resource = RemoteResource::from_pretrained(rust_bert::bert::BertModelResources::BERT);
+        let weights_path = weights_resource.get_local_path()?;
         fs::copy(weights_path, &weights_dest)?;
-        println!("Weights saved to {}", weights_dest);
+        debug!("Weights saved to {}", weights_dest);
     } else {
-        println!("Weights already exist at {}. Skipping.", weights_dest);
+        debug!("Weights already exist at {}. Skipping.", weights_dest);
     }
 
-    println!("Model successfully saved to {}", save_path);
+    debug!("Model successfully saved to {}", save_path);
     Ok(())
 }
+
 
 pub async fn get_attention_scores(text: &str) -> Result<(Vec<String>, Vec<f32>)> {
     let home_dir = env::home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
