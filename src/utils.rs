@@ -257,10 +257,16 @@ pub async fn format_local_llm_response(
             // End of stream, print accumulated content
             if !acc.is_empty() {
                 debug!("Stream has ended: {}", acc);
-                let attention = get_attention_scores(&acc).await;
+                let result = get_attention_scores(&acc).await;
+
+                let (tokens, _) = match result {
+                    Ok((tokens, attention_scores)) => (tokens, attention_scores),
+                    Err(_) => return None, // Convert the error to None
+                };
                 let embeddings = generate_text_embedding(&acc).await;
                 debug!("{:?}", embeddings);
-                debug!("{:?}", attention);
+                let compressed_prompt = tokens.join(" ");
+                debug!("Compressed Prompt {:?}", compressed_prompt);
 
             }
             return None;

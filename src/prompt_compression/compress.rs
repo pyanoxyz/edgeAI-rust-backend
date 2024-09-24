@@ -1,4 +1,6 @@
-use rust_bert::distilbert::{DistilBertConfig, DistilBertModelMaskedLM};
+// use rust_bert::distilbert::{DistilBertConfig, DistilBertModelMaskedLM};
+use rust_bert::bert::{BertConfig, BertForMaskedLM};
+
 use rust_bert::resources::{RemoteResource, ResourceProvider, LocalResource};
 use rust_bert::Config;
 use rust_tokenizers::tokenizer::{BertTokenizer, Tokenizer, TruncationStrategy};
@@ -10,13 +12,14 @@ use std::env;
 use tokio::task;
 use log::{debug,info};
 use std::fs::create_dir_all;
+use tch::IndexOp;
 
 /// Directory to save the model
 const ROOT_PYANO_DIR: &str = ".pyano";
 const PYANO_MODELS_DIR: &str = ".pyano/models";
 
 pub struct AttentionCalculator {
-    model: DistilBertModelMaskedLM,
+    model: BertForMaskedLM,
     tokenizer: BertTokenizer,
     device: Device,
 }
@@ -26,16 +29,16 @@ impl AttentionCalculator {
         // Load the pre-trained DistilBERT model and tokenizer
         let device = Device::cuda_if_available();
 
-        let config_path = format!("{}/distillbert//config.json", model_path);
-        let vocab_path = format!("{}/distillbert//vocab.txt", model_path);
-        let weights_path = format!("{}/distillbert//model.ot", model_path);
+        let config_path = format!("{}/bert-bert-uncased/config.json", model_path);
+        let vocab_path = format!("{}/bert-bert-uncased/vocab.txt", model_path);
+        let weights_path = format!("{}/bert-bert-uncased/model.ot", model_path);
 
         // Load DistilBERT config
-        let config = DistilBertConfig::from_file(config_path);
+        let config = BertConfig::from_file(config_path);
 
         // Load DistilBERT model
         let mut vs = nn::VarStore::new(device);
-        let model = DistilBertModelMaskedLM::new(&vs.root(), &config);
+        let model = BertForMaskedLM::new(&vs.root(), &config);
 
         // Load tokenizer
         let tokenizer = BertTokenizer::from_file(vocab_path.clone(), true, true)
@@ -45,31 +48,71 @@ impl AttentionCalculator {
         vs.load(weights_path.clone())
         .map_err(|e| anyhow::anyhow!("Failed to load model weights from {}: {:?}", weights_path, e))?;
     
-    
         Ok(AttentionCalculator { model, tokenizer, device })
     }
 
-    pub fn calculate_attention_scores(&self, prompt: &str) -> Result<(Vec<String>, Vec<f32>)> {
+    pub fn calculate_attention_scores(&self, prompt: &str, threshold: f32) -> Result<(Vec<String>, Vec<f32>)> {
         // Tokenize input text into chunks
         let tokenized_input = self.tokenizer.encode(prompt, None, 512, &TruncationStrategy::LongestFirst, 0);
+
+          // Extract token_ids from tokenized_input
+        let token_ids = &tokenized_input.token_ids;
+        info!("Total length of tokens {}", token_ids.len());        
         let input_ids = Tensor::from_slice(&tokenized_input.token_ids).unsqueeze(0).to(self.device);
 
         // Forward pass through the model to get attention scores
         let outputs = no_grad(|| {
             self.model
-                .forward_t(Some(&input_ids), None, None, false)
-        })?;
+            .forward_t(Some(&input_ids), None, None, None, None, None, None, false) // Only the last argument is a boolean
+        });
 
-        let attention_scores: Vec<f32>;
-
+        let mut attention_scores: Vec<Vec<f32>> = Vec::new();
+        let mut self_attention_scores: Vec<f32> = Vec::new(); 
         if let Some(attentions) = outputs.all_attentions {
             if let Some(last_attention) = attentions.last() {
                 let attention = last_attention.copy();
         
-                // Continue processing attention, such as averaging attention across all heads
-                let attention_weights = attention.mean_dim(&[1i64][..], false, tch::Kind::Float);  // Convert array to slice
-                // Now, attention_weights can be used further...
-                attention_scores = Vec::<f32>::try_from(attention_weights.squeeze().to_kind(tch::Kind::Float).contiguous())?;
+                // Average across attention heads only, keeping the sequence intact
+                let attention_weights = attention.mean_dim(&[1i64][..], false, tch::Kind::Float);
+                
+                // Check the dimensions of the attention weights tensor
+                
+                // 2D attention scores for each token with respect to other tokens
+                let attention_scores_2d = attention_weights.squeeze().to_kind(tch::Kind::Float).contiguous();
+
+                let num_tokens = attention_scores_2d.size()[0]; // Ensure you're indexing correctly here
+                self_attention_scores = Vec::with_capacity(num_tokens as usize);
+        
+                for i in 0..num_tokens {
+                    let self_attention = attention_scores_2d.i((i, i)).double_value(&[]);
+                    self_attention_scores.push(self_attention as f32);  // Self-attention of token i
+                }
+        
+                // info!("Self-attention scores for all tokens: {:?}", self_attention_scores);
+        
+                // Map tokens back to their original words
+                // Decode tokens back to subword units instead of full strings
+                let tokens: Vec<String> = token_ids
+                .iter()
+                .map(|id| self.tokenizer.decode(&[*id], true, true))
+                .collect();
+
+                // Filter out special tokens ([CLS], [SEP], [PAD]) and scores below threshold
+                let valid_tokens_attention: Vec<(String, f32)> = tokens
+                .into_iter()
+                .zip(self_attention_scores.into_iter())
+                .filter(|(token, score)| {
+                    !["[CLS]", "[SEP]", "[PAD]"].contains(&token.as_str()) 
+                    && !token.starts_with("##")
+                    && *score > threshold
+                })
+                .collect();
+
+                info!("Total length of tokens execeeding threshold {}", valid_tokens_attention.len());        
+
+                // Log the tokens and their attention
+                let (valid_tokens, valid_attention_scores): (Vec<_>, Vec<_>) = valid_tokens_attention.into_iter().unzip();
+                return Ok((valid_tokens, valid_attention_scores));
 
             } else {
                 return Err(anyhow::anyhow!("No last attention scores found"));
@@ -77,35 +120,14 @@ impl AttentionCalculator {
         } else {
             return Err(anyhow::anyhow!("No attention output available from the model"));
         }
-
-        // let attention = outputs.all_attentions.unwrap().last().unwrap().copy();
-        
-        // // Average attention across all heads
-        // let attention_weights = attention.mean_dim(&[1i64][..], false, tch::Kind::Float);  // Convert array to slice
-        
-        // Map tokens back to their original words
-        let token_ids: Vec<i64> = tokenized_input.token_ids.iter().map(|id| *id).collect();
-        let tokens: Vec<String> = self.tokenizer.decode_list(&[token_ids], true, true);
-
-
-        // Filter out special tokens ([CLS], [SEP], [PAD])
-        let valid_tokens_attention: Vec<(String, f32)> = tokens
-            .into_iter()
-            .zip(attention_scores.into_iter())
-            .filter(|(token, _)| !["[CLS]", "[SEP]", "[PAD]"].contains(&token.as_str()))
-            .collect();
-
-        // Separate tokens and their scores
-        let (valid_tokens, valid_attention_scores): (Vec<_>, Vec<_>) = valid_tokens_attention.into_iter().unzip();
-
-        Ok((valid_tokens, valid_attention_scores))
+  
     }
 }
 
 
 fn download_and_save_model(save_path: &str) -> Result<()> {
     // Check if the model already exists and has contents
-    let distillbert_dir = format!("{}/distillbert", save_path);
+    let distillbert_dir = format!("{}/bert-bert-uncased", save_path);
 
     // Create the directory if it doesn't exist
     if !Path::new(&distillbert_dir).exists() {
@@ -115,9 +137,10 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
     println!("Downloading and saving model to {}...", save_path);
 
     // Downloading config, vocab, and weights
-    let config_resource = RemoteResource::from_pretrained(rust_bert::distilbert::DistilBertConfigResources::DISTIL_BERT);
-    let vocab_resource = RemoteResource::from_pretrained(rust_bert::distilbert::DistilBertVocabResources::DISTIL_BERT);
-    let weights_resource = RemoteResource::from_pretrained(rust_bert::distilbert::DistilBertModelResources::DISTIL_BERT);
+    // Downloading config, vocab, and weights for BERT-base-uncased
+    let config_resource = RemoteResource::from_pretrained(rust_bert::bert::BertConfigResources::BERT);
+    let vocab_resource = RemoteResource::from_pretrained(rust_bert::bert::BertVocabResources::BERT);
+    let weights_resource = RemoteResource::from_pretrained(rust_bert::bert::BertModelResources::BERT);
 
     // Save the resources locally if not already present
     let config_path = config_resource.get_local_path()?;
@@ -125,9 +148,9 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
     let weights_path = weights_resource.get_local_path()?;
 
     // Check if config, vocab, or weights files exist before copying
-    let config_dest = format!("{}/distillbert/config.json", save_path);
-    let vocab_dest = format!("{}/distillbert/vocab.txt", save_path);
-    let weights_dest = format!("{}/distillbert/model.ot", save_path);
+    let config_dest = format!("{}/bert-bert-uncased/config.json", save_path);
+    let vocab_dest = format!("{}/bert-bert-uncased/vocab.txt", save_path);
+    let weights_dest = format!("{}/bert-bert-uncased/model.ot", save_path);
 
     if !Path::new(&config_dest).exists() {
         fs::copy(config_path, &config_dest)?;
@@ -154,7 +177,7 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_attention_scores(text: &str) -> Result<()> {
+pub async fn get_attention_scores(text: &str) -> Result<(Vec<String>, Vec<f32>)> {
     let home_dir = env::home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
     let pyano_models_dir = home_dir.join(".pyano/models");
 
@@ -180,16 +203,11 @@ pub async fn get_attention_scores(text: &str) -> Result<()> {
         let attention_calculator = AttentionCalculator::new(&pyano_models_dir_str_clone)?;
 
         // Calculate attention scores for the input text
-        let (tokens, attention_scores) = attention_calculator.calculate_attention_scores(&text_clone)?;
-        info!("Tokens: {:?}", tokens);
+        let (tokens, attention_scores) = attention_calculator.calculate_attention_scores(&text_clone, 0.06)?;
 
         Ok((tokens, attention_scores))
     })
     .await??;
 
-    // Output the tokens and attention scores
-    debug!("Tokens: {:?}", tokens);
-    debug!("Attention scores: {:?}", attention_scores);
-
-    Ok(())
+    Ok((tokens, attention_scores))
 }
