@@ -9,6 +9,7 @@ type LanguageFn = unsafe fn() -> Language;
 
 pub struct ParserLoader {
     pub lib: Library,
+    pub sol_lib: Library
 }
 
 
@@ -19,10 +20,13 @@ impl ParserLoader {
 
             // Construct the absolute path to the shared library
             let lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/languages.so";
+            let sol_lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/solidity-language.so";
+
             info!("Libpath is {:?}",lib_path);
 
             let lib = Library::new(lib_path).expect("Failed to load shared library");
-            ParserLoader { lib }
+            let sol_lib =  Library::new(sol_lib_path).expect("Failed to load solidity library");
+            ParserLoader { lib, sol_lib }
         }
     }
 
@@ -66,9 +70,18 @@ impl ParserLoader {
             // Use CString for null-terminated string compatibility
             let symbol_name = format!("{}_{}", "tree_sitter", parser_name);
 
-            let cstr_parser_name = CString::new(symbol_name).map_err(|_| "Failed to create CString".to_string())?;
-            let tree_sitter_lang: Symbol<LanguageFn> = self.lib.get(cstr_parser_name.as_bytes_with_nul())
+            let cstr_parser_name = CString::new(symbol_name.clone()).map_err(|_| "Failed to create CString".to_string())?;
+
+            let tree_sitter_lang: Symbol<LanguageFn>;
+            if parser_name == "solidity"{
+                tree_sitter_lang  = self.sol_lib.get(cstr_parser_name.as_bytes_with_nul())
+                .map_err(|_| format!("Failed to load symbol solidity for parser: {}", parser_name))?;
+            
+            }else{
+                tree_sitter_lang = self.lib.get(cstr_parser_name.as_bytes_with_nul())
                 .map_err(|_| format!("Failed to load symbol for parser: {}", parser_name))?;
+            
+            }
             
             // Set the language for the parser
             parser.set_language(tree_sitter_lang())

@@ -100,7 +100,7 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize the shared state to store the PID
     let p = parser::parse_code::IndexCode::new();
-    let chunks = p.create_code_chunks("/Users/saurav/Programs/pyano/backendapp/app/src");
+    let chunks = p.create_code_chunks("/Users/saurav/Programs/pyano/openzeppelin-contracts");
     HttpServer::new(move || {
         App::new()
             .service(hello) // Register the GET route
