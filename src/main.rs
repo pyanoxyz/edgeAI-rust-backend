@@ -15,6 +15,7 @@ mod embeddings;
 mod rerank;
 mod prompt_compression;
 mod history;
+mod parser;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -87,7 +88,6 @@ async fn run_llama_server() {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-
     // Access the environment variables
     let llm_server_url = env::var("LLM_SERVER_URL").expect("LLM_SERVER_URL not found");
     let temperature = env::var("TEMPERATURE").expect("TEMPERATURE not found");
@@ -99,7 +99,8 @@ async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     // Initialize the shared state to store the PID
-
+    let p = parser::parse_code::IndexCode::new();
+    let chunks = p.create_code_chunks("/Users/saurav/Programs/pyano/backendapp/app/src");
     HttpServer::new(move || {
         App::new()
             .service(hello) // Register the GET route
