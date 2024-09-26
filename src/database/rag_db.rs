@@ -125,64 +125,67 @@ impl DBConfig{
         context_files
     }
 
-    // pub fn fetch_chats_for_session_and_user(&self, session_id: &str, user_id: &str) -> Vec<Value> {
-    //     // Lock the mutex to access the connection
-    //     let connection = self.connection.lock().unwrap();
+    pub fn quert_session_context(
+        &self,
+        query_embeddings: Vec<f32>,
+        limit: u8,
+    ) -> Result<Vec<serde_json::Value>> {
+        let connection = self.connection.lock().unwrap();
+        
+        // Step 1: Query nearest embeddings based on the vector search.
+        let nearest_embeddings: Vec<(i64, f64)> = connection
+            .prepare(
+                r#"
+                SELECT
+                    rowid,
+                    distance
+                FROM vec_items
+                WHERE embedding MATCH ?1
+                ORDER BY distance
+                LIMIT 10
+                "#,
+            )?
+            .query_map([query_embeddings.as_bytes()], |row| {
+                Ok((row.get(0)?, row.get(1)?)) // rowid and distance
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
     
-    //     // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
-    //     let mut stmt = connection
-    //         .prepare(
-    //             "SELECT id, user_id, session_id, prompt, compressed_prompt, response, timestamp 
-    //              FROM chats 
-    //              WHERE session_id = ? AND user_id = ?
-    //              ORDER BY timestamp ASC",
-    //         )
-    //         .unwrap();
+        // Step 2: For each rowid, collect content and file_path from context_children table, and convert to JSON.
+        let mut context_files: Vec<serde_json::Value> = Vec::new();
     
-    //     // Create a vector to hold the chat entries
-    //     let mut chats: Vec<Value> = Vec::new();
+        for (rowid, distance) in nearest_embeddings {
+            let mut stmt = connection.prepare(
+                r#"
+                SELECT
+                    content,
+                    file_path,
+                    chunk_type,
+                    timestamp
+                FROM context_children
+                WHERE vec_rowid = ?1
+                "#,
+            )?;
     
-    //     // Execute the query and iterate over the rows, collecting them into the vector
-    //     let chat_iter = stmt
-    //         .query_map([session_id, user_id], |row| {
-    //             Ok(json!({
-    //                 "id": row.get::<_, String>(0)?,  // id
-    //                 "user_id": row.get::<_, String>(1)?,  // user_id
-    //                 "session_id": row.get::<_, String>(2)?,  // session_id
-    //                 "prompt": row.get::<_, String>(3)?,  // prompt
-    //                 "compressed_prompt": row.get::<_, String>(4)?,  // compressed_prompt
-    //                 "response": row.get::<_, String>(5)?,  // response
-    //                 "timestamp": row.get::<_, String>(6)?,  // timestamp
-    //             }))
-    //         })
-    //         .unwrap();
+            let context_iter = stmt.query_map([rowid], |row| {
+                Ok(json!({
+                    "rowid": rowid,
+                    "distance": distance,
+                    "content": row.get::<_, String>(0)?,   // content
+                    "file_path": row.get::<_, String>(1)?, // file_path
+                    "chunk_type": row.get::<_, String>(2)?, // chunk_type
+                    "timestamp": row.get::<_, String>(3)?,  // timestamp
+                }))
+            })?;
     
-    //     // Collect all rows into the `chats` vector
-    //     for chat in chat_iter {
-    //         chats.push(chat.unwrap());
-    //     }
+            // Collect all rows into the `context_files` vector as JSON objects.
+            for context in context_iter {
+                context_files.push(context?);
+            }
+        }
     
-    //     chats
-    // }
-
-    // // Example of how to use the RwLock for reading
-    // pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>> {
-    // let connection = self.connection.lock().unwrap();
-    // let mut stmt = connection.prepare(
-    //     "
-    //     SELECT
-    //         id,
-    //         distance,
-    //         prompt,
-    //         compressed_prompt,
-    //         response
-    //     FROM chats
-    //     WHERE embeddings MATCH ?1
-    //     ORDER BY distance
-    //     LIMIT ?2
-    //     ",
-    // )?;
-
+        Ok(context_files)
+    }
+    
     // let result = stmt.query_map(
     //     params![query_embeddings.as_bytes(), limit as i64], 
     //     |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))  // Get the ID and similarity score
