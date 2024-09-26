@@ -88,45 +88,42 @@ impl DBConfig{
     }
 
 
-    // pub fn fetch_chats_for_user(&self, user_id: &str) -> Vec<Value> {
-    //     // Lock the mutex to access the connection
-    //     let connection = self.connection.lock().unwrap();
+    pub fn fetch_session_context(&self, user_id: &str, session_id: &str) -> Vec<Value> {
+        // Lock the mutex to access the connection
+        let connection = self.connection.lock().unwrap();
     
-    //     // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
-    //     let mut stmt = connection
-    //         .prepare(
-    //             "SELECT id, user_id, session_id, prompt, compressed_prompt, response, timestamp 
-    //              FROM chats 
-    //              WHERE user_id = ?
-    //              ORDER BY timestamp ASC",
-    //         )
-    //         .unwrap();
+        // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
+        let mut stmt = connection
+            .prepare(
+                "SELECT user_id, session_id, parent_path, timestamp 
+                 FROM context_parent 
+                 WHERE user_id = ? and session_id = ?
+                 ORDER BY timestamp ASC",
+            )
+            .unwrap();
     
-    //     // Create a vector to hold the chat entries in JSON format
-    //     let mut chats: Vec<Value> = Vec::new();
+        // Create a vector to hold the chat entries in JSON format
+        let mut context_files: Vec<Value> = Vec::new();
     
-    //     // Execute the query and iterate over the rows, collecting them into the vector
-    //     let chat_iter = stmt
-    //         .query_map([user_id], |row| {
-    //             Ok(json!({
-    //                 "id": row.get::<_, String>(0)?,  // id
-    //                 "user_id": row.get::<_, String>(1)?,  // user_id
-    //                 "session_id": row.get::<_, String>(2)?,  // session_id
-    //                 "prompt": row.get::<_, String>(3)?,  // prompt
-    //                 "compressed_prompt": row.get::<_, String>(4)?,  // compressed_prompt
-    //                 "response": row.get::<_, String>(5)?,  // response
-    //                 "timestamp": row.get::<_, String>(6)?,  // timestamp
-    //             }))
-    //         })
-    //         .unwrap();
+        // Execute the query and iterate over the rows, collecting them into the vector
+        let context_iter = stmt
+            .query_map([user_id, session_id], |row| {
+                Ok(json!({
+                    "user_id": row.get::<_, String>(0)?,  // user_id
+                    "session_id": row.get::<_, String>(1)?,  // session_id
+                    "path": row.get::<_, String>(2)?,  // prompt
+                    "timestamp": row.get::<_, String>(3)?,  // timestamp
+                }))
+            })
+            .unwrap();
     
-    //     // Collect all rows into the `chats` vector
-    //     for chat in chat_iter {
-    //         chats.push(chat.unwrap());
-    //     }
+        // Collect all rows into the `chats` vector
+        for chat in context_iter {
+            context_files.push(chat.unwrap());
+        }
     
-    //     chats
-    // }
+        context_files
+    }
 
     // pub fn fetch_chats_for_session_and_user(&self, session_id: &str, user_id: &str) -> Vec<Value> {
     //     // Lock the mutex to access the connection

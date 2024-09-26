@@ -1,4 +1,4 @@
-use actix_web::{post, web, HttpRequest, HttpResponse, Error};
+use actix_web::{post, get, web, HttpRequest, HttpResponse, Responder, Error};
 use serde::{Deserialize, Serialize};
 use crate::authentication::authorization::is_request_allowed;
 use log::{debug, info};
@@ -6,6 +6,7 @@ use crate::session_manager::check_session;
 use serde_json::json;
 use crate::rag::code_rag::index_code;
 use crate::parser::parse_code::Chunk;
+use crate::database::db_config::DB_INSTANCE;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RagRequest {
@@ -16,7 +17,8 @@ pub struct RagRequest {
 
 
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(rag_request); // Register the correct route handler
+    cfg.service(rag_request)
+        .service(get_indexed_context); // Register the correct route handler
 }
 
 #[post("/rags/index/code")]
@@ -34,8 +36,6 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
             })));
         }
     };
-
-
 
     let user_id: &str;
     let user_id_cloned;
@@ -73,57 +73,33 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
         }
     }
 
-    Ok(HttpResponse::Ok().json(json!({
+    Ok(HttpResponse::Ok()
+    .insert_header(("X-Session-Id", session_id.clone())) // Add session_id in custom header
+    .json(json!({
         "session_id": session_id,
         "message": "Request processed successfully",
-        "chunks": all_indexed_chunks
+        "chunks_length": all_indexed_chunks.len()
     })))
 
 }
 
-    // // match req {
-    // //     Some(req) => {
-    // //         if let Ok(Some(user)) = is_request_allowed(req.clone()).await {
-    // //             debug!("Ok reached here");
+#[derive(Deserialize)]
+struct QueryParams {
+    session_id: String,
+    user_id: Option<String>,
+}
 
-    // //             // Cloud LLM response with actual user ID
-    // //             handle_llm_response(
-    // //                 Some(req),
-    // //                 prompt.system_prompt,
-    // //                 &user_prompt,
-    // //                 &full_user_prompt,
-    // //                 &session_id,
-    // //                 &user.user_id,
-    // //                 RequestType::Refactor,
-    // //             )
-    // //             .await
-    // //         } else {
-    // //             // Local LLM response
-    // //             handle_llm_response(
-    // //                 None,
-    // //                 prompt.system_prompt,
-    // //                 &user_prompt,
-    // //                 &full_user_prompt,
-    // //                 &session_id,
-    // //                 "user_id",
-    // //                 RequestType::Refactor,
-    // //             )
-    // //             .await
-    // //         }
-    // //     }
-    // //     None => {
-    // //         // Local LLM response without user info
-    // //         handle_llm_response(
-    // //             None,
-    // //             prompt.system_prompt,
-    // //             &user_prompt,
-    // //             &full_user_prompt,
-    // //             &session_id,
-    // //             "user_id",
-    // //             RequestType::Refactor,
-    // //         )
-    // //         .await
-    // //     }
-    // // }
+#[get("/rags/index/code")]
+async fn get_indexed_context(query: web::Query<QueryParams>) -> Result<HttpResponse, Error>  {
+    let session_id = &query.session_id;
+    let user_id = query.user_id.as_deref().unwrap_or("user_id");
+    let entries = DB_INSTANCE.fetch_session_context(user_id, session_id);
 
-    // }
+    Ok(HttpResponse::Ok()
+    .insert_header(("X-Session-Id", session_id.clone())) // Add session_id in custom header
+    .json(json!({
+        "session_id": session_id,
+        "message": "Request processed successfully",
+        "files": entries
+    })))
+}
