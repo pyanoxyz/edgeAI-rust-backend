@@ -35,10 +35,33 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
         }
     };
 
+
+
+    let user_id: &str;
+    let user_id_cloned;
+
+    match is_request_allowed(req.clone()).await {
+        Ok(Some(user)) => {
+            // Handle case when request is allowed and user is present
+            user_id_cloned = user.user_id.clone();
+            user_id = &user_id_cloned;
+        }
+        Ok(None) => {
+            // Handle case when request is allowed but user is not found
+            user_id = "user_id"; // Default user_id
+        }
+        Err(error_response) => {
+            // Handle the error case by propagating the HttpResponse error
+            return Err(actix_web::error::ErrorInternalServerError(json!({
+                "error": "An error occurred during request validation"
+            })));
+        }
+    }
+
     let mut all_indexed_chunks: Vec<Chunk> = Vec::new();
     // Iterate over the files and call `index_code` for each
     for file_path in &data.files {
-        match index_code(file_path).await {
+        match index_code(user_id, &session_id, file_path).await {
             Ok(chunks) => {
                 all_indexed_chunks.extend(chunks);
             }, 
@@ -55,6 +78,7 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
         "message": "Request processed successfully",
         "chunks": all_indexed_chunks
     })))
+
 }
 
     // // match req {

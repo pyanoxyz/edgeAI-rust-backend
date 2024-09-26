@@ -1,6 +1,8 @@
 use actix_web::{post, web, HttpRequest, HttpResponse, Error};
 use crate::chats::chat_struct::{RefactorPrompt, handle_request};
 use serde::{Deserialize, Serialize};
+use crate::request_type::RequestType;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatExplainRequest {
     pub prompt: String,
@@ -44,5 +46,5 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, req: HttpRequest)
             USER_PROMPT_TEMPLATE,
         );
     
-        handle_request(&prompt, &data.prompt, data.session_id.clone(), Some(req)).await
+        handle_request(&prompt, &data.prompt, data.session_id.clone(), Some(req), RequestType::Explain).await
     }

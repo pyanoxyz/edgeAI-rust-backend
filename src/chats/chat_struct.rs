@@ -20,12 +20,12 @@ impl RefactorPrompt {
         }
     }
 }
-
-pub async  fn handle_request(
+pub async fn handle_request(
     prompt: &RefactorPrompt,
     user_prompt: &str,
     session_id: Option<String>,
     req: Option<HttpRequest>,
+    chat_request_type: RequestType,
 ) -> Result<HttpResponse, Error> {
     // Check session and extract user ID from the request
     let session_id = match check_session(session_id) {
@@ -42,48 +42,52 @@ pub async  fn handle_request(
         .replace("{context}", "")
         .replace("{user_prompt}", user_prompt);
 
-    match req {
-        Some(req) => {
-            if let Ok(Some(user)) = is_request_allowed(req.clone()).await {
-                debug!("Ok reached here");
-
-                // Cloud LLM response with actual user ID
-                handle_llm_response(
-                    Some(req),
-                    prompt.system_prompt,
-                    &user_prompt,
-                    &full_user_prompt,
-                    &session_id,
-                    &user.user_id,
-                    RequestType::Refactor,
-                )
-                .await
-            } else {
-                // Local LLM response
-                handle_llm_response(
-                    None,
-                    prompt.system_prompt,
-                    &user_prompt,
-                    &full_user_prompt,
-                    &session_id,
-                    "user_id",
-                    RequestType::Refactor,
-                )
-                .await
-            }
-        }
+    // Raise error if req is None
+    let req = match req {
+        Some(req) => req,
         None => {
-            // Local LLM response without user info
-            handle_llm_response(
-                None,
-                prompt.system_prompt,
-                &user_prompt,
-                &full_user_prompt,
-                &session_id,
-                "user_id",
-                RequestType::Refactor,
-            )
-            .await
+            return Err(actix_web::error::ErrorBadRequest(json!({
+                "error": "Request is required but not provided"
+            })));
         }
+    };
+
+    // Handle Cloud LLM or Local LLM responses based on user permission
+    if let Ok(Some(user)) = is_request_allowed(req.clone()).await {
+        debug!("Cloud LLM response for user ID: {}", user.user_id);
+
+        handle_llm_response(
+            Some(req),
+            prompt.system_prompt,
+            &user_prompt,
+            &full_user_prompt,
+            &session_id,
+            &user.user_id,
+            chat_request_type,
+        )
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(json!({
+                "error": format!("LLM response error: {}", e)
+            }))
+        })
+    } else {
+        debug!("Local LLM response");
+
+        handle_llm_response(
+            None,
+            prompt.system_prompt,
+            &user_prompt,
+            &full_user_prompt,
+            &session_id,
+            "user_id",
+            chat_request_type,
+        )
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(json!({
+                "error": format!("Local LLM response error: {}", e)
+            }))
+        })
     }
 }

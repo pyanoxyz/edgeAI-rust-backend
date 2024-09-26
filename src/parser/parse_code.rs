@@ -61,12 +61,46 @@ impl ParseCode {
         false
     }
 
+    /// Check if the file is related to configuration or documentation by its extension.
+    fn is_config_file(file_path: &Path) -> bool {
+        // List of common config and documentation-related file extensions
+        let config_extensions = [
+            // Configuration files
+            "json", "yaml", "yml", "toml", "ini", "xml", "conf", "cfg", "properties", "env",
+
+            // Documentation and text files
+            "md", "markdown", "txt", "rst", "adoc", "org", "log",
+
+            // Office documents
+            "doc", "docx", "odt", "rtf", "pdf",
+
+            // Code-related config files
+            "gitignore", "editorconfig", "gitattributes", "dockerfile", "makefile", "cmake",
+            
+            // Checksums and keys
+            "md5", "sha1", "sha256", "key",
+        ];
+
+        if let Some(extension) = file_path.extension() {
+            // Convert the extension to a string and compare it against the known config extensions
+            if let Some(ext_str) = extension.to_str() {
+                return config_extensions.iter().any(|&ext| ext_str.eq_ignore_ascii_case(ext));
+            }
+        }
+        false
+    }
+
 
     pub fn process_local_file(&self, file_path: &str) -> Option<Vec<Chunk>> {
         let path = Path::new(file_path);
         // Open the file at the given file path.
         if Self::is_media_file(path) {
             debug!("Skipping media file: {:?}", path);
+            return None;
+        }
+
+        if Self::is_config_file(path) {
+            debug!("Skipping config file: {:?}", path);
             return None;
         }
 

@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 use git2::Repository;
 use log::{info, debug};
 use crate::parser::parse_code::{ParseCode, Chunk};
+use crate::database::db_config::DB_INSTANCE;
+use crate::embeddings::text_embeddings::generate_text_embedding;
+use crate::prompt_compression::compress::get_attention_scores;
 #[derive(Debug)]
 enum FileReadError {
     IoError(io::Error),
@@ -20,25 +23,6 @@ enum FileReadError {
     UrlParseError(UrlParseError),
     FileNotFoundError(String),
 }
-
-// // impl From<io::Error> for FileReadError {
-// //     fn from(err: io::Error) -> FileReadError {
-// //         FileReadError::IoError(err)
-// //     }
-// // }
-
-// // impl From<ReqwestError> for FileReadError {
-// //     fn from(err: ReqwestError) -> FileReadError {
-// //         FileReadError::ReqwestError(err)
-// //     }
-// // }
-
-// // impl From<UrlParseError> for FileReadError {
-// //     fn from(err: UrlParseError) -> FileReadError {
-// //         FileReadError::UrlParseError(err)
-// //     }
-// // }
-
 
 #[derive(Debug)]
 struct InvalidGitURLError(String);
@@ -112,45 +96,45 @@ async fn download_github_repo(repo_url: &str, temp_dir: &TempDir) -> Result<Stri
 /// # Returns
 /// A `Result` containing a tuple of the file path (as `String`) and file contents (as `Vec<u8>`),
 /// or a `FileReadError` if the operation fails.
-async fn download_file(file_path: &str) -> Result<(String, Vec<u8>), FileReadError> {
-    // Check if the file path is a URL (either HTTP or HTTPS)
-    if file_path.starts_with("http://") || file_path.starts_with("https://") {
-        // Parse the URL from the file path
-        let mut url = Url::parse(file_path).map_err(FileReadError::UrlParseError)?;
+// async fn download_file(file_path: &str) -> Result<(String, Vec<u8>), FileReadError> {
+//     // Check if the file path is a URL (either HTTP or HTTPS)
+//     if file_path.starts_with("http://") || file_path.starts_with("https://") {
+//         // Parse the URL from the file path
+//         let mut url = Url::parse(file_path).map_err(FileReadError::UrlParseError)?;
 
-        // If the URL is from GitHub and contains `/blob/`, replace `blob` with `raw` for direct file access
-        if url.host_str() == Some("github.com") && url.path().contains("/blob/") {
-            let path_segments: Vec<&str> = url.path().split('/').collect();
-            let blob_index = path_segments.iter().position(|&x| x == "blob").unwrap_or(0);
+//         // If the URL is from GitHub and contains `/blob/`, replace `blob` with `raw` for direct file access
+//         if url.host_str() == Some("github.com") && url.path().contains("/blob/") {
+//             let path_segments: Vec<&str> = url.path().split('/').collect();
+//             let blob_index = path_segments.iter().position(|&x| x == "blob").unwrap_or(0);
 
-            // Modify the path from blob to raw
-            let mut modified_segments = path_segments.clone();
-            modified_segments[blob_index] = "raw";
-            let new_path = modified_segments.join("/");
-            url.set_path(&new_path);
-        }
+//             // Modify the path from blob to raw
+//             let mut modified_segments = path_segments.clone();
+//             modified_segments[blob_index] = "raw";
+//             let new_path = modified_segments.join("/");
+//             url.set_path(&new_path);
+//         }
 
-        // Fetch the remote file using reqwest
-        let client = Client::new();
-        let response = client.get(url.as_str()).send().await.map_err(FileReadError::ReqwestError)?;
+//         // Fetch the remote file using reqwest
+//         let client = Client::new();
+//         let response = client.get(url.as_str()).send().await.map_err(FileReadError::ReqwestError)?;
 
-        // Check if the request was successful, if yes return content as Vec<u8>
-        let response = response.error_for_status().map_err(FileReadError::ReqwestError)?;
-        let content = response.bytes().await.map_err(FileReadError::ReqwestError)?.to_vec();
-        return Ok((file_path.to_string(), content));
-    } else {
-        // If it's a local file path, check if the file exists and read its content asynchronously
-        if std::path::Path::new(file_path).exists() {
-            let mut file = TokioFile::open(file_path).await.map_err(FileReadError::IoError)?;
-            let mut content = Vec::new();
-            file.read_to_end(&mut content).await.map_err(FileReadError::IoError)?;
-            return Ok((file_path.to_string(), content));
-        } else {
-            // Return an error if the file is not found
-            return Err(FileReadError::FileNotFoundError(file_path.to_string()));
-        }
-    }
-}
+//         // Check if the request was successful, if yes return content as Vec<u8>
+//         let response = response.error_for_status().map_err(FileReadError::ReqwestError)?;
+//         let content = response.bytes().await.map_err(FileReadError::ReqwestError)?.to_vec();
+//         return Ok((file_path.to_string(), content));
+//     } else {
+//         // If it's a local file path, check if the file exists and read its content asynchronously
+//         if std::path::Path::new(file_path).exists() {
+//             let mut file = TokioFile::open(file_path).await.map_err(FileReadError::IoError)?;
+//             let mut content = Vec::new();
+//             file.read_to_end(&mut content).await.map_err(FileReadError::IoError)?;
+//             return Ok((file_path.to_string(), content));
+//         } else {
+//             // Return an error if the file is not found
+//             return Err(FileReadError::FileNotFoundError(file_path.to_string()));
+//         }
+//     }
+// }
 
 
 fn is_excluded_directory(dir_name: &str) -> bool {
@@ -237,11 +221,14 @@ async fn is_remote_repo(path: &str) -> Result<bool, Box<dyn Error>> {
     Ok(false)
 }
 
-pub async fn index_code(path: &str) -> Result<Vec<Chunk>, Box<dyn Error>> {
+pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<Vec<Chunk>, Box<dyn Error>> {
     let mut file_paths = Vec::new();
     let parse_code = ParseCode::new();
     let mut all_chunks: Vec<Chunk> = Vec::new();
 
+    //Storing parent files in the database, before storing individual chunks for parent in 
+    //another table
+    DB_INSTANCE.store_parent_context(user_id, session_id, path);
     // First, check if it's a local directory
     if is_local_directory(path) {
 
@@ -249,6 +236,7 @@ pub async fn index_code(path: &str) -> Result<Vec<Chunk>, Box<dyn Error>> {
         for file_path in &file_paths {
             let chunks = parse_code.process_local_file(&file_path);
             all_chunks.extend(chunks.into_iter().flatten());
+
         }
     } 
     // Check if it's a local file
@@ -287,22 +275,46 @@ pub async fn index_code(path: &str) -> Result<Vec<Chunk>, Box<dyn Error>> {
     } 
     // If none of the conditions are met
     else {
-        println!("The path is neither a local directory, file, remote repository, nor a remote file.");
+        info!("The path is neither a local directory, file, remote repository, nor a remote file.");
     }
 
-    // Handle file_paths (e.g., indexing, processing)
-    // for file in &file_paths {
-    //     println!("Indexed file: {}", file);
-    // }
+    for chunk in &all_chunks {
+        // let tokens: Option<Vec<String>> = compress_chunk_content(chunk).await;
+        // let compressed_content = tokens.unwrap().join(" ");
+        let embeddings: Option<Vec<f32>> = chunk_embeddings(chunk).await;
+
+        DB_INSTANCE.store_children_context(user_id, 
+                        session_id, 
+                        path, 
+                        &chunk.chunk_type, 
+                        &chunk.content, 
+                        chunk.start_line, 
+                        chunk.end_line, 
+                        &chunk.file_path, 
+                        &embeddings.unwrap() )
+    }
+
 
     Ok(all_chunks)
 }
 
-// - function that takes in remote repo and downlod the whole repo in a temp database
 
-// - function that takes in local repo
-// - walk the whole repo and collects all the files
+async fn chunk_embeddings(chunk: &Chunk) -> Option<Vec<f32>>{
+    let embeddings_result = generate_text_embedding(&chunk.content).await;
+    let embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => return None,
+    };
+    Some(embeddings)
+}
 
 
-// a function that takes in file path and returns file content
+async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
+    let result = get_attention_scores(&chunk.content).await;
+    let (tokens, _) = match result {
+        Ok((tokens, attention_scores)) => (tokens, attention_scores),
+        Err(_) => return None, // Convert the error to None
+    };
+    Some(tokens)
 
+}

@@ -31,6 +31,9 @@ impl DBConfig {
 
         db_config.create_chat_table();
         db_config.create_chat_embeddings();
+        db_config.create_parent_context_table();
+        db_config.create_children_context_table();
+        db_config.create_context_embeddings();
         db_config
     }
     
@@ -53,6 +56,69 @@ impl DBConfig {
         ).unwrap();
     }
 
+    //Saves the individual chunks in the table
+    pub fn create_parent_context_table(&self){
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS context_parent (
+                id TEXT PRIMARY KEY,  -- UUID as primary key
+                session_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                parent_path TEXT NOT NULL,
+                timestamp TEXT
+            );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
+    //Saves the individual chunks in the table
+    pub fn create_children_context_table(&self){
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS context_children (
+                id TEXT PRIMARY KEY,  -- UUID as primary key
+                user_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                parent_path TEXT,
+                chunk_type TEXT,
+                content TEXT,
+                end_line INTEGER,
+                file_path TEXT,
+                start_line INTEGER,
+                vec_rowid TEXT NOT NULL,  -- This links to the rowid in the vec table
+                timestamp TEXT            
+                );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
+    
+    pub fn create_context_embeddings(&self){
+        let connection = self.connection.lock().unwrap();
+        let table_exists: bool = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='context_embeddings';",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0) > 0;
+
+        // Create the 'chat_embeddings' table only if it doesn't exist
+        if !table_exists {
+        connection.execute(
+            "
+            CREATE VIRTUAL TABLE context_embeddings USING vec0 (id TEXT PRIMARY KEY, embeddings float[384]);
+            ",
+            [],
+        ).unwrap();
+        }
+    }
+
+
     pub fn create_chat_embeddings(&self){
         let connection = self.connection.lock().unwrap();
         let table_exists: bool = connection
@@ -74,8 +140,6 @@ impl DBConfig {
         }
     }
 
-
-    
 }
 // Create a singleton instance of the database connection
 

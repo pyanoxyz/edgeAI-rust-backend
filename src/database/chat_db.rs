@@ -38,7 +38,7 @@ impl DBConfig{
         "INSERT INTO chat_embeddings (id,  embeddings)
             VALUES (?, ?)",
         params![
-            uuid,
+            session_id,
             embeddings.as_bytes()         
             ],
     ).unwrap();
