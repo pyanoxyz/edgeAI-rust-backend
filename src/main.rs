@@ -16,6 +16,7 @@ mod rerank;
 mod prompt_compression;
 mod history;
 mod parser;
+mod rag;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -98,9 +99,10 @@ async fn main() -> std::io::Result<()> {
     println!("Cloud Execution Mode: {}", cloud_execution_mode);
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
-    // Initialize the shared state to store the PID
-    let p = parser::parse_code::IndexCode::new();
-    let chunks = p.create_code_chunks("/Users/saurav/Programs/pyano/openzeppelin-contracts");
+    //TODO: This is meant just for testing the Parsers for indexing code, Delete it 
+    //when the rag will be live
+    // let p = parser::parse_code::IndexCode::new();
+    // let chunks = p.create_code_chunks("/Users/saurav/Programs/pyano/openzeppelin-contracts");
     HttpServer::new(move || {
         App::new()
             .service(hello) // Register the GET route
@@ -116,6 +118,8 @@ async fn main() -> std::io::Result<()> {
             .configure(chats::chat_findbugs_routes)  // Add chatfindbugs routes
             .configure(chats::chat_docstring_routes)  // Add docstring routes
             .configure(history::histoy_register_routes)  // Add chat explain routes
+            .configure(rag::code_rag_api::register_routes)  // Add chat explain routes
+
     })
     .bind("localhost:52556")?
     .run()

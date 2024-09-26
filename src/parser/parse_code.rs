@@ -1,41 +1,34 @@
 use log::{info, debug, warn, error};
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
-use walkdir::WalkDir;
-
+use reqwest::Client;
+use std::error::Error;
 use crate::parser::parser::ParserLoader;
 
 // Define the struct for IndexCode
-pub struct IndexCode{
+pub struct ParseCode{
     parse_loader: ParserLoader
 }
 
+// Define a struct for the code chunks
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Chunk {
+    pub chunk_type: String,
+    pub content: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub file_path: String,
+}
 
-impl IndexCode {
+
+impl ParseCode {
     pub fn new() -> Self {
        let parse_loader = ParserLoader::new();
        Self { parse_loader: parse_loader }
     }
 
-    pub fn create_code_chunks(&self, repo_path: &str) -> Vec<Chunk> {
-        let mut all_chunks: Vec<Chunk> = Vec::new();
-        
-        for entry in WalkDir::new(repo_path).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(chunks) = self.process_file(path) {
-                    info!("Code chunk for {:?} length of chunks {:?}", path, chunks.len());
-                    all_chunks.extend(chunks);
-                } else {
-                    info!("Skipping binary or unreadable file: {:?}", path);
-                }
-            }
-        }
-    
-        debug!("Extracted {} code chunks", all_chunks.len());
-        all_chunks
-    }
 
     /// Static method to check if a file is binary
     /// A helper function to determine if the file is binary by reading a portion of it.
@@ -51,9 +44,33 @@ impl IndexCode {
         false // Likely a text file
     }
 
-    fn process_file(&self, file_path: &Path) -> Option<Vec<Chunk>> {
+
+    /// Check if the file is related to media (audio, video, image) by its extension.
+    fn is_media_file(file_path: &Path) -> bool {
+        // List of common media-related file extensions (audio, video, images)
+        let media_extensions = [
+            "mp3", "wav", "flac", // Audio
+            "mp4", "mkv", "avi", "mov", // Video
+            "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", // Images
+        ];
+
+        if let Some(extension) = file_path.extension() {
+            // Convert the extension to a string and compare it against the known media extensions
+            return media_extensions.iter().any(|&ext| extension == ext);
+        }
+        false
+    }
+
+
+    pub fn process_local_file(&self, file_path: &str) -> Option<Vec<Chunk>> {
+        let path = Path::new(file_path);
         // Open the file at the given file path.
-        let file = File::open(file_path).expect("Failed to open file");
+        if Self::is_media_file(path) {
+            debug!("Skipping media file: {:?}", path);
+            return None;
+        }
+
+        let file = File::open(path).expect("Failed to open file");
 
         // Create a buffered reader to efficiently read the file's content.
         let mut reader = BufReader::new(file);
@@ -72,8 +89,37 @@ impl IndexCode {
 
         // Call the `chunk_code` method to process the content into chunks,
         // passing the file content and the file path to determine the chunking strategy.
-        Some(self.chunk_code(&content, file_path))
+        Some(self.chunk_code(&content, path))
     }
+
+    // Method to download and process a remote file
+    pub async fn process_remote_file(&self, url: &str) -> Result<Option<Vec<Chunk>>, Box<dyn Error>> {
+        let client = Client::new();
+        
+        // Fetch the file content from the remote URL
+        let response = client.get(url).send().await?;
+
+        if !response.status().is_success() {
+            debug!("Failed to download file from: {}", url);
+            return Err(format!("Failed to download file: {}", url).into());
+        }
+
+        let content = response.bytes().await?.to_vec();
+
+        // Check if the content is binary
+        if Self::is_binary_file(&content) {
+            debug!("The remote file is binary and will not be chunked.");
+            return Ok(None);
+        }
+
+        // Create a mock path for chunking strategy, or pass the URL as an identifier
+        let path = Path::new(url);
+
+        // Call the `chunk_code` method to process the content into chunks,
+        // passing the file content and the mock path to determine the chunking strategy.
+        Ok(Some(self.chunk_code(&content, path)))
+    }
+
 
 
     pub fn chunk_code(&self, file_content: &[u8], file_path: &Path) -> Vec<Chunk> {
@@ -300,12 +346,3 @@ impl IndexCode {
     
 }
 
-// Define a struct for the code chunks
-#[derive(Debug)]
-pub struct Chunk {
-    pub chunk_type: String,
-    pub content: String,
-    pub start_line: usize,
-    pub end_line: usize,
-    pub file_path: String,
-}

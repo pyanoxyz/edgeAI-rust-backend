@@ -56,7 +56,7 @@ select_model() {
 
         # MODEL_NAME="Qwen2.5-14B-Instruct-IQ3_XS.gguf"
         # MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-IQ3_XS.gguf"
-        CTX=16192
+        CTX=32768
         BATCH_SIZE=4096 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
                         #is 8 tokens long at the batch size is 4, then it'll send two chunks of 4. It may be more efficient to process 
                         # in larger chunks. For some models or approaches, sometimes that is the case. It will depend on how llama.cpp handles it.

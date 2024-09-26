@@ -1,13 +1,10 @@
 
-use actix_web::{error::InternalError, post, web, HttpRequest, HttpResponse, Error};
+use actix_web::{HttpRequest, HttpResponse, Error};
 use crate::{request_type::RequestType, utils::handle_llm_response};
 use serde_json::json;
 use crate::session_manager::check_session;
-use log::{debug, error};
+use log::debug;
 use crate::authentication::authorization::is_request_allowed;
-use serde::{Deserialize, Serialize};
-
-
 
 #[derive(Debug)]
 pub struct RefactorPrompt {
