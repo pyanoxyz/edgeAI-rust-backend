@@ -13,10 +13,12 @@ use tokio::task;
 use log::{debug,info};
 use std::fs::create_dir_all;
 use tch::IndexOp;
-
+use serde_json::{Value, json};
+use std::fs::{File, OpenOptions};
 /// Directory to save the model
 const ROOT_PYANO_DIR: &str = ".pyano";
 const PYANO_MODELS_DIR: &str = ".pyano/models";
+use std::io::{Read, Write};  // Import the required traits
 
 pub struct AttentionCalculator {
     model: BertForMaskedLM,
@@ -50,32 +52,64 @@ impl AttentionCalculator {
     
         Ok(AttentionCalculator { model, tokenizer, device })
     }
+    pub fn calculate_attention_scores(&self, prompt: &str, threshold: f32) -> Result<Vec<String>, anyhow::Error> {
+        let mut all_tokens: Vec<String> = Vec::new();
+        let mut current_start = 0;
+        let chunk_size = 512;
+    
+        while current_start < prompt.len() {
+            // Ensure we don't go out of bounds
+            let end = if current_start + chunk_size > prompt.len() {
+                prompt.len()
+            } else {
+                current_start + chunk_size
+            };
+    
+            // Tokenize the chunk of the prompt starting from the current position
+            let result: Result<(Vec<String>, Vec<f32>), anyhow::Error> = self.calculate_attention_per_chunk(&prompt[current_start..end], threshold);
+    
+            let (tokens, _) = match result {
+                Ok((tokens, attention_scores)) => (tokens, attention_scores),
+                Err(e) => {
+                    println!("Error while unwrapping tokens: {:?}", e);
+                    return Err(e);
+                }
+            };
+    
+            // Add the chunk tokens to the vector
+            all_tokens.extend(tokens);
+    
+            // Move the start index forward by the length of the chunk (i.e., 512 characters)
+            current_start += chunk_size;
+        }
+    
+        Ok(all_tokens)
+    }
 
-    pub fn calculate_attention_scores(&self, prompt: &str, threshold: f32) -> Result<(Vec<String>, Vec<f32>)> {
+
+    pub fn calculate_attention_per_chunk(&self, prompt: &str, threshold: f32) -> Result<(Vec<String>, Vec<f32>)> {
         // Tokenize input text into chunks
-        let tokenized_input = self.tokenizer.encode(prompt, None, 512, &TruncationStrategy::LongestFirst, 0);
+        // The models expects maximum 512 tokens, if you dont trucate it, you will get werid errors or the program will just panick without any errors
+
+        let tokenized_input: rust_tokenizers::TokenizedInput = self.tokenizer.encode(prompt, None, 512,  &TruncationStrategy::LongestFirst, 0);
 
           // Extract token_ids from tokenized_input
         let token_ids = &tokenized_input.token_ids;
-        info!("Total length of tokens {}", token_ids.len());        
         let input_ids = Tensor::from_slice(&tokenized_input.token_ids).unsqueeze(0).to(self.device);
-
-        // Forward pass through the model to get attention scores
         let outputs = no_grad(|| {
             self.model
-            .forward_t(Some(&input_ids), None, None, None, None, None, None, false) // Only the last argument is a boolean
+                .forward_t(Some(&input_ids), None, None, None, None, None, None, false)
         });
-
-        let attention_scores: Vec<Vec<f32>> = Vec::new();
-        let mut self_attention_scores: Vec<f32> = Vec::new(); 
+                
+        let mut self_attention_scores: Vec<f32> = Vec::new();
         if let Some(attentions) = outputs.all_attentions {
+
             if let Some(last_attention) = attentions.last() {
                 let attention = last_attention.copy();
         
                 // Average across attention heads only, keeping the sequence intact
                 let attention_weights = attention.mean_dim(&[1i64][..], false, tch::Kind::Float);
-                
-                // Check the dimensions of the attention weights tensor
+                                // Check the dimensions of the attention weights tensor
                 
                 // 2D attention scores for each token with respect to other tokens
                 let attention_scores_2d = attention_weights.squeeze().to_kind(tch::Kind::Float).contiguous();
@@ -107,9 +141,6 @@ impl AttentionCalculator {
                     && *score > threshold
                 })
                 .collect();
-
-                info!("Total length of tokens execeeding threshold {}", valid_tokens_attention.len());        
-
                 // Log the tokens and their attention
                 let (valid_tokens, valid_attention_scores): (Vec<_>, Vec<_>) = valid_tokens_attention.into_iter().unzip();
                 Ok((valid_tokens, valid_attention_scores))
@@ -124,6 +155,40 @@ impl AttentionCalculator {
     }
 }
 
+fn modify_config_file(file_path: &str, new_key: &str, new_value: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Check if the file exists
+    if !Path::new(file_path).exists() {
+        return Err("Config file not found".into());
+    }
+
+    // Open the file
+    let mut file = File::open(file_path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    // Parse the file contents into a JSON object
+    let mut config: Value = serde_json::from_str(&contents)?;
+
+    // Check if the key already exists
+    if !config.get(new_key).is_some() {
+        // If the key doesn't exist, add it
+        config[new_key] = json!(new_value);
+
+        // Write the modified JSON back to the file
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(file_path)?;
+
+        let updated_contents = serde_json::to_string_pretty(&config)?;
+        file.write_all(updated_contents.as_bytes())?;
+        println!("Key '{}' added to the config file.", new_key);
+    } else {
+        println!("Key '{}' already exists. No changes made.", new_key);
+    }
+
+    Ok(())
+}
 
 fn download_and_save_model(save_path: &str) -> Result<()> {
     // Define paths for config, vocab, and weights
@@ -138,10 +203,10 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
     }
 
     // Create the directory if it doesn't exist
-    let distillbert_dir = format!("{}/bert-bert-uncased", save_path);
-    if !Path::new(&distillbert_dir).exists() {
-        create_dir_all(&distillbert_dir)?;
-        debug!("Created directory: {}", distillbert_dir);
+    let bert_dir = format!("{}/bert-bert-uncased", save_path);
+    if !Path::new(&bert_dir).exists() {
+        create_dir_all(&bert_dir)?;
+        debug!("Created directory: {}", bert_dir);
     }
 
     // Downloading config, vocab, and weights only if they don't exist
@@ -150,6 +215,9 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
         let config_path = config_resource.get_local_path()?;
         fs::copy(config_path, &config_dest)?;
         debug!("Config saved to {}", config_dest);
+        //Ifthis key is not added to the config.json files, The model will stop giving out attention scores
+        modify_config_file(&config_dest, "output_attentions", "true");
+
     } else {
         debug!("Config already exists at {}. Skipping.", config_dest);
     }
@@ -177,7 +245,7 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
 }
 
 
-pub async fn get_attention_scores(text: &str) -> Result<(Vec<String>, Vec<f32>)> {
+pub async fn get_attention_scores(text: &str) -> Result<Vec<String>> {
     let home_dir = env::home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
     let pyano_models_dir = home_dir.join(".pyano/models");
 
@@ -195,19 +263,19 @@ pub async fn get_attention_scores(text: &str) -> Result<(Vec<String>, Vec<f32>)>
     let pyano_models_dir_str_clone = pyano_models_dir_str.clone();
 
     // Run the download_and_save_model in a blocking task
-    let (tokens, attention_scores): (Vec<String>, Vec<f32>) = task::spawn_blocking(move || -> Result<(Vec<String>, Vec<f32>), anyhow::Error> {
+    let tokens: Vec<String> = task::spawn_blocking(move || -> Result<Vec<String>, anyhow::Error> {
         // Download and save the model, handle any errors
         download_and_save_model(&pyano_models_dir_str_clone).map_err(|e| anyhow::anyhow!(e))?;
 
         // Create the AttentionCalculator
         let attention_calculator = AttentionCalculator::new(&pyano_models_dir_str_clone)?;
 
-        // Calculate attention scores for the input text
-        let (tokens, attention_scores) = attention_calculator.calculate_attention_scores(&text_clone, 0.06)?;
+        // Calculate attention scores for the input text Larger value will give less content
+        let tokens = attention_calculator.calculate_attention_scores(&text_clone, 0.04)?;
 
-        Ok((tokens, attention_scores))
+        Ok(tokens)
     })
     .await??;
 
-    Ok((tokens, attention_scores))
+    Ok(tokens)
 }

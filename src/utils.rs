@@ -279,11 +279,12 @@ pub async fn format_local_llm_response(
                 // End of stream, process accumulated content
                 if !acc.is_empty() {
                     debug!("Stream has ended: {}", acc);
-                    let result = get_attention_scores(&acc).await;
-
-                    let (tokens, _) = match result {
-                        Ok((tokens, attention_scores)) => (tokens, attention_scores),
-                        Err(_) => return None, // Convert the error to None
+                    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
+                    let tokens = match result {
+                        Ok(tokens) => tokens,
+                        Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);
+                        return None
+                    }
                     };
                     let embeddings_result = generate_text_embedding(&acc).await;
                     

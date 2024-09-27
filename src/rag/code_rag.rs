@@ -276,15 +276,19 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     }
 
     for chunk in &all_chunks {
-        // let tokens: Option<Vec<String>> = compress_chunk_content(chunk).await;
-        // let compressed_content = tokens.unwrap().join(" ");
-        let embeddings: Option<Vec<f32>> = chunk_embeddings(chunk).await;
+
+        let tokens: Option<Vec<String>> = compress_chunk_content(chunk).await;
+        let unwrapped_token = tokens.unwrap();
+        let compressed_content = unwrapped_token.join(" ");        
+        info!("content_tokens = {}, compressed_content_tokens={}", &chunk.content.len(), compressed_content.len());
+        let embeddings: Option<Vec<f32>> = compressed_content_embeddings(&compressed_content).await;
 
         DB_INSTANCE.store_children_context(user_id, 
                         session_id, 
                         path, 
                         &chunk.chunk_type, 
                         &chunk.content, 
+                        &compressed_content,
                         chunk.start_line, 
                         chunk.end_line, 
                         &chunk.file_path, 
@@ -296,8 +300,8 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
 }
 
 
-async fn chunk_embeddings(chunk: &Chunk) -> Option<Vec<f32>>{
-    let embeddings_result = generate_text_embedding(&chunk.content).await;
+async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
+    let embeddings_result = generate_text_embedding(content).await;
     let embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
         Err(_) => return None,
@@ -307,11 +311,12 @@ async fn chunk_embeddings(chunk: &Chunk) -> Option<Vec<f32>>{
 
 
 async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
-    let result = get_attention_scores(&chunk.content).await;
-    let (tokens, _) = match result {
-        Ok((tokens, attention_scores)) => (tokens, attention_scores),
-        Err(_) => return None, // Convert the error to None
+    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&chunk.content).await;
+    let tokens = match result {
+        Ok(tokens) => tokens,
+        Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);
+        return None
+       }
     };
     Some(tokens)
-
 }

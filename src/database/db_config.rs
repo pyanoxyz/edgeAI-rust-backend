@@ -85,6 +85,7 @@ impl DBConfig {
                 parent_path TEXT,
                 chunk_type TEXT,
                 content TEXT,
+                compressed_content TEXT,
                 end_line INTEGER,
                 file_path TEXT,
                 start_line INTEGER,

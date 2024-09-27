@@ -46,7 +46,8 @@ impl DBConfig{
         session_id: &str, 
         parent_path: &str, 
         chunk_type: &str, 
-        content: &str, 
+        content: &str,
+        compressed_content: &str,
         end_line: usize, 
         start_line: usize, 
         file_path: &str,
@@ -65,9 +66,9 @@ impl DBConfig{
         // Insert into context_children
         connection.execute(
             "INSERT INTO context_children (
-                id, user_id, session_id, parent_path, chunk_type, content, 
+                id, user_id, session_id, parent_path, chunk_type, content, compressed_content,
                 end_line, file_path, start_line, vec_rowid, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 uuid,
                 user_id,
@@ -75,6 +76,7 @@ impl DBConfig{
                 parent_path,
                 chunk_type,
                 content,
+                compressed_content,
                 end_line,
                 file_path,
                 start_line,
