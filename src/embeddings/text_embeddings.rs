@@ -5,7 +5,6 @@ use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, Sente
 use tch::Device;
 use tokio::task;
 use std::fs::{self, File};
-use std::io::Write;
 use std::sync::{Once, Mutex, Arc};
 use reqwest::blocking::Client;
 use std::io::Cursor;
@@ -51,7 +50,7 @@ impl EmbeddingsManager {
 
         if !file_path.exists() {
             println!("Downloading {}...", file_url);
-            let mut response = client.get(&url).send()?;
+            let response = client.get(&url).send()?;
             if !response.status().is_success() {
                 return Err(format!("Failed to download file: {}. Status: {}", file_url, response.status()).into());
             }

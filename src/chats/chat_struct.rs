@@ -1,6 +1,6 @@
 
 use actix_web::{HttpRequest, HttpResponse, Error};
-use crate::{request_type::RequestType, utils::handle_llm_response};
+use crate::{request_type::RequestType, utils::local_llm_response, utils::remote_llm_response};
 use serde_json::json;
 use crate::session_manager::check_session;
 use log::debug;
@@ -56,10 +56,9 @@ pub async fn handle_request(
     if let Ok(Some(user)) = is_request_allowed(req.clone()).await {
         debug!("Cloud LLM response for user ID: {}", user.user_id);
 
-        handle_llm_response(
-            Some(req),
+        remote_llm_response(
             prompt.system_prompt,
-            &user_prompt,
+            user_prompt,
             &full_user_prompt,
             &session_id,
             &user.user_id,
@@ -74,10 +73,9 @@ pub async fn handle_request(
     } else {
         debug!("Local LLM response");
 
-        handle_llm_response(
-            None,
+        local_llm_response(
             prompt.system_prompt,
-            &user_prompt,
+            user_prompt,
             &full_user_prompt,
             &session_id,
             "user_id",

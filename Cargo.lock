@@ -2815,6 +2815,7 @@ dependencies = [
  "log",
  "once_cell",
  "psutil",
+ "rand",
  "regex",
  "reqwest 0.12.7",
  "rusqlite",

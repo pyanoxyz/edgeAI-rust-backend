@@ -1,5 +1,5 @@
 use actix_web::{error::InternalError, post, web, HttpRequest, HttpResponse, Error};
-use crate::{request_type::RequestType, utils::handle_llm_response};
+use crate::{request_type::RequestType, utils::local_llm_response, utils::remote_llm_response};
 use serde_json::json;
 use crate::session_manager::check_session;
 use log::{debug, error};
@@ -60,13 +60,10 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
 
     match is_request_allowed(req.clone()).await {
         Ok(Some(user)) => {
-            debug!("Ok reached here");
-
             // Cloud LLM response with actual user ID
-            handle_llm_response(
-                Some(req),
+            remote_llm_response(
                 SYSTEM_PROMPT,
-                &code_before,
+                code_before,
                 &full_user_prompt,
                 &session_id,
                 &user.user_id, // Using actual user ID from request
@@ -78,10 +75,9 @@ pub async fn infill_code(data: web::Json<InfillRequest>, req: HttpRequest) -> Re
             debug!("Local llm being executed with session_id {}", session_id);
 
             // Local LLM response (no user info available)
-            handle_llm_response(
-                None,
+            local_llm_response(
                 SYSTEM_PROMPT,
-                &code_before,
+                code_before,
                 &full_user_prompt,
                 &session_id,
                 "user_id", // Placeholder user_id for local execution

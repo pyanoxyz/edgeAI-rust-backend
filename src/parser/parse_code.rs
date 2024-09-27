@@ -1,4 +1,4 @@
-use log::{info, debug, warn, error};
+use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -26,7 +26,7 @@ pub struct Chunk {
 impl ParseCode {
     pub fn new() -> Self {
        let parse_loader = ParserLoader::new();
-       Self { parse_loader: parse_loader }
+       Self { parse_loader }
     }
 
 
@@ -37,7 +37,7 @@ impl ParseCode {
         for &byte in content.iter().take(1024) {
             // ASCII printable characters range from 0x20 (space) to 0x7E (~)
             // ASCII control characters (below 0x20) are typically non-printable, except for newlines and tabs
-            if !(byte == b'\n' || byte == b'\t' || (0x20 <= byte && byte <= 0x7E)) {
+            if !(byte == b'\n' || byte == b'\t' || (0x20..=0x7E).contains(&byte)) {
                 return true; // Likely a binary file
             }
         }

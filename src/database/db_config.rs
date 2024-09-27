@@ -111,7 +111,7 @@ impl DBConfig {
         if !table_exists {
         connection.execute(
             "
-            CREATE VIRTUAL TABLE context_embeddings USING vec0 (id TEXT PRIMARY KEY, embeddings float[384]);
+            CREATE VIRTUAL TABLE context_embeddings USING vec0 (embeddings float[384]);
             ",
             [],
         ).unwrap();
@@ -133,7 +133,7 @@ impl DBConfig {
         if !table_exists {
         connection.execute(
             "
-            CREATE VIRTUAL TABLE chat_embeddings USING vec0 (id TEXT PRIMARY KEY, embeddings float[384]);
+            CREATE VIRTUAL TABLE chat_embeddings USING vec0 (embeddings float[384]);
             ",
             [],
         ).unwrap();

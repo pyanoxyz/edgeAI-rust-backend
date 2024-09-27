@@ -1,16 +1,22 @@
 
 
 use crate::database::db_config::DBConfig;
-use crate::embeddings;
 use uuid::Uuid;
 use rusqlite::params;
 use rusqlite::Result;
 use zerocopy::AsBytes;
 use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
-
+use rand::Rng;
 
 impl DBConfig{
+
+
+    fn generate_rowid() -> u64 {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
+    }
+
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
     pub fn store_parent_context(&self, user_id: &str, session_id: &str, parent_path: &str) {
             
@@ -51,7 +57,7 @@ impl DBConfig{
         
         // Generate UUIDs for the child and the vector embedding
         let uuid = Uuid::new_v4().to_string();
-        let vec_row_id = Uuid::new_v4().to_string();
+        let vec_row_id = Self::generate_rowid();
     
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
@@ -79,7 +85,7 @@ impl DBConfig{
     
         // Insert into context_embeddings
         connection.execute(
-            "INSERT INTO context_embeddings (id, embeddings) VALUES (?, ?)",
+            "INSERT INTO context_embeddings (rowid, embeddings) VALUES (?, ?)",
             params![
                 vec_row_id,
                 embeddings.as_bytes(),  // You can pass the float array directly in rusqlite
@@ -88,7 +94,7 @@ impl DBConfig{
     }
 
 
-    pub fn fetch_session_context(&self, user_id: &str, session_id: &str) -> Vec<Value> {
+    pub fn fetch_session_context_files(&self, user_id: &str, session_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
     
@@ -125,10 +131,11 @@ impl DBConfig{
         context_files
     }
 
-    pub fn quert_session_context(
+    pub fn query_session_context(
         &self,
-        query_embeddings: Vec<f32>,
-        limit: u8,
+        user_id: &str,
+        session_id: &str,
+        query_embeddings: Vec<f32>    
     ) -> Result<Vec<serde_json::Value>> {
         let connection = self.connection.lock().unwrap();
         
@@ -139,10 +146,10 @@ impl DBConfig{
                 SELECT
                     rowid,
                     distance
-                FROM vec_items
-                WHERE embedding MATCH ?1
+                FROM context_embeddings
+                WHERE embeddings MATCH ?1
                 ORDER BY distance
-                LIMIT 10
+                LIMIT 30
                 "#,
             )?
             .query_map([query_embeddings.as_bytes()], |row| {

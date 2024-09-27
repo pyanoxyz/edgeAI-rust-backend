@@ -1,12 +1,13 @@
-use actix_web::{post, get, web, HttpRequest, HttpResponse, Responder, Error};
+use actix_web::{post, get, web, HttpRequest, HttpResponse, Error};
 use serde::{Deserialize, Serialize};
 use crate::authentication::authorization::is_request_allowed;
-use log::{debug, info};
+use log::info;
 use crate::session_manager::check_session;
 use serde_json::json;
 use crate::rag::code_rag::index_code;
 use crate::parser::parse_code::Chunk;
 use crate::database::db_config::DB_INSTANCE;
+use crate::embeddings::text_embeddings::generate_text_embedding;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RagRequest {
@@ -18,7 +19,8 @@ pub struct RagRequest {
 
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(rag_request)
-        .service(get_indexed_context); // Register the correct route handler
+        .service(get_indexed_context)
+        .service(fetch_similar_entries); // Register the correct route handler
 }
 
 #[post("/rags/index/code")]
@@ -93,7 +95,7 @@ struct QueryParams {
 async fn get_indexed_context(query: web::Query<QueryParams>) -> Result<HttpResponse, Error>  {
     let session_id = &query.session_id;
     let user_id = query.user_id.as_deref().unwrap_or("user_id");
-    let entries = DB_INSTANCE.fetch_session_context(user_id, session_id);
+    let entries = DB_INSTANCE.fetch_session_context_files(user_id, session_id);
 
     Ok(HttpResponse::Ok()
     .insert_header(("X-Session-Id", session_id.clone())) // Add session_id in custom header
@@ -102,4 +104,53 @@ async fn get_indexed_context(query: web::Query<QueryParams>) -> Result<HttpRespo
         "message": "Request processed successfully",
         "files": entries
     })))
+}
+
+
+#[derive(Deserialize)]
+struct FetchContextRequest {
+    session_id: String,
+    query: String,
+    user_id: Option<String>
+}
+
+#[post("/rags/index/fetch-context")]
+async fn fetch_similar_entries(
+    req: HttpRequest,
+    data: web::Json<FetchContextRequest>,
+) -> Result<HttpResponse, Error> { 
+    let user_id = data.user_id.clone().unwrap_or_else(|| "user_id".to_string());
+
+    if data.session_id.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "detail": "context Id is required"
+        })));
+    }
+    
+    if data.query.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "detail": "query is required"
+        })));
+    }
+
+    let query = &data.query;
+
+    let embeddings_result = generate_text_embedding(&query).await;
+    let query_embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "No Matching result found", 
+            "result": []
+        }))),
+    };
+
+    let entries = DB_INSTANCE.query_session_context(&user_id, &data.session_id, query_embeddings).unwrap();
+    Ok(HttpResponse::Ok()
+    .insert_header(("X-Session-Id", data.session_id.clone())) // Add session_id in custom header
+    .json(json!({
+        "session_id": data.session_id.clone(),
+        "message": "Request processed successfully",
+        "result": entries
+    })))
+
 }

@@ -3,15 +3,12 @@ use std::error::Error;
 use reqwest::Error as ReqwestError;
 use std::fs;
 use url::{Url, ParseError as UrlParseError};
-use tokio::io::AsyncReadExt;
-use std::io::Cursor;
 use tempfile::TempDir;
-use tokio::fs::File as TokioFile;
 use reqwest::Client;
-use std::io::{self, BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::io::{self};
+use std::path::Path;
 use git2::Repository;
-use log::{info, debug};
+use log::info;
 use crate::parser::parse_code::{ParseCode, Chunk};
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
@@ -234,7 +231,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
 
         traverse_directory(path, &mut file_paths)?;
         for file_path in &file_paths {
-            let chunks = parse_code.process_local_file(&file_path);
+            let chunks = parse_code.process_local_file(file_path);
             all_chunks.extend(chunks.into_iter().flatten());
 
         }
@@ -244,7 +241,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         // Add the file path directly to the list
         file_paths.push(path.to_string());
         println!("The path is a local file.");
-        let chunks = parse_code.process_local_file(&path);
+        let chunks = parse_code.process_local_file(path);
         all_chunks.extend(chunks.into_iter().flatten());
     }
     
@@ -257,7 +254,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         traverse_directory(&repo_dir_path, &mut file_paths)?;
         println!("The path is a remote repository.");
         for file_path in &file_paths {
-            let chunks = parse_code.process_local_file(&file_path);
+            let chunks = parse_code.process_local_file(file_path);
             all_chunks.extend(chunks.into_iter().flatten());
         }
         
@@ -265,7 +262,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     // Check if it's a remote file
     else if path.starts_with("http://") || path.starts_with("https://") {
         file_paths.push(path.to_string());
-        let result = parse_code.process_remote_file(&path).await?;
+        let result = parse_code.process_remote_file(path).await?;
         // Check if the result is Some(Vec<Chunk>)
         if let Some(chunks) = result {
             // Extend `all_chunks` with the actual chunks

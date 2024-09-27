@@ -6,7 +6,6 @@ use regex::Regex;
 use bytes::Bytes;
 use futures::stream::unfold;
 use serde_json::Value;
-use crate::embeddings;
 use crate::request_type::RequestType;
 use dotenv::dotenv;
 use psutil::process::Process;
@@ -37,16 +36,16 @@ pub fn is_cloud_execution_mode() -> bool {
 
 
 pub fn get_llm_server_url() -> String {
-    let llm_server_url = env::var("LLM_SERVER_URL").unwrap_or_else(|_| {
+    
+
+    env::var("LLM_SERVER_URL").unwrap_or_else(|_| {
         eprintln!("Error: Environment variable LLM_SERVER_URL is not set.");
         process::exit(1); // Exit the program with an error code
-    });
-
-    llm_server_url
+    })
 }
 
-pub async fn handle_llm_response(
-    req: Option<HttpRequest>,
+
+pub async fn local_llm_response(
     system_prompt: &str,
     prompt: &str,
     full_user_prompt: &str,
@@ -54,63 +53,68 @@ pub async fn handle_llm_response(
     user_id: &str,
     request_type: RequestType,
 ) -> Result<HttpResponse, Error> {
-    if let Some(req) = req {
-        // If the request exists, handle cloud LLM response
-        match cloud_llm_response(system_prompt, full_user_prompt).await {
-            Ok(stream) => {
-                let response = HttpResponse::Ok()
-                    .append_header(("X-Session-ID", session_id.to_string()))
-                    .streaming(stream);
-                return Ok(response);
-            }
-            Err(e) => {
-                return Err(actix_web::error::ErrorInternalServerError(json!({
-                    "error": e.to_string()
-                })));
-            }
-        }
-    } else {
-        // Handle local LLM response if request is not present
-        debug!("Local llm being executed with session_id {} and user_id {}", session_id, user_id);
 
-        match local_llm_response(system_prompt,
-                        full_user_prompt, 
-                        0.2).await {
+    match local_llm_request(system_prompt,
+        full_user_prompt, 
+        0.2).await {
             Ok(stream) => {
-                let prompt_owned = Arc::new(prompt.to_owned());
-                let session_id_owned = Arc::new(session_id.to_owned());
-                let user_id_owned = Arc::new(user_id.to_owned());
-                let request_type_owned = Arc::new(request_type.to_string().to_owned());  // Here, `request_type` is moved
+            let prompt_owned = Arc::new(prompt.to_owned());
+            let session_id_owned = Arc::new(session_id.to_owned());
+            let user_id_owned = Arc::new(user_id.to_owned());
+            let request_type_owned = Arc::new(request_type.to_string().to_owned());  // Here, `request_type` is moved
 
-                // Clone request_type if you need to use it later
-                // let request_type_clone = request_type.clone();
-                            
+        // Clone request_type if you need to use it later
+        // let request_type_clone = request_type.clone();
 
         let formatted_stream = format_local_llm_response(
-            stream,
-            prompt_owned.clone(), // Clone Arc for shared ownership
+                stream,
+        prompt_owned.clone(), // Clone Arc for shared ownership
             session_id_owned.clone(),
             user_id_owned.clone(),
             request_type_owned.clone()
-        ).await;
-    
-                let response = HttpResponse::Ok()
-                    .append_header(("X-Session-ID", session_id.to_string()))
-                    .streaming(formatted_stream);
-                return Ok(response);
-            }
-            Err(e) => {
-                error!("Local llm being executed with session_id {} and user_id {}", session_id, user_id);
+            ).await;
 
-                return Err(actix_web::error::ErrorInternalServerError(json!({
-                    "error": e.to_string()
-                })));
-            }
+        let response = HttpResponse::Ok()
+            .append_header(("X-Session-ID", session_id.to_string()))
+            .streaming(formatted_stream);
+        Ok(response)
+        }
+        Err(e) => {
+        error!("Local llm being executed with session_id {} and user_id {}", session_id, user_id);
+
+        Err(actix_web::error::ErrorInternalServerError(json!({
+            "error": e.to_string()
+        })))
+        }
+}
+
+}
+
+pub async fn remote_llm_response(
+    system_prompt: &str,
+    prompt: &str,
+    full_user_prompt: &str,
+    session_id: &str,
+    user_id: &str,
+    request_type: RequestType,
+) -> Result<HttpResponse, Error> {
+    match cloud_llm_response(system_prompt, full_user_prompt).await {
+        Ok(stream) => {
+            let response = HttpResponse::Ok()
+                .append_header(("X-Session-ID", session_id.to_string()))
+                .streaming(stream);
+            Ok(response)
+        }
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError(json!({
+                "error": e.to_string()
+            })))
         }
     }
 }
 
-async fn local_llm_response(
+
+async fn local_llm_request(
     system_prompt: &str,
     full_user_prompt: &str,
     temperature: f64,
@@ -130,7 +134,7 @@ async fn local_llm_response(
     debug!("{}", full_prompt);
 
     let resp = client
-        .post(&format!("{}/completions",  llm_server_url))
+        .post(format!("{}/completions",  llm_server_url))
         .json(&json!({
             "prompt": full_prompt,
             "stream": true,
@@ -232,7 +236,7 @@ pub async fn format_local_llm_response(
     user_id: Arc<String>,
     request_type: Arc<String>      // Wrapped in Arc
 ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
-    let mut accumulated_content = String::new();
+    let accumulated_content = String::new();
 
     unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
         // The cloning should happen inside the async block
@@ -353,9 +357,9 @@ pub fn get_ram_usage(pid: u32) -> f64 {
     let memory_info = process.memory_info().unwrap();
 
     // Convert the RSS (resident set size) from bytes to MB
-    let ram_usage_mb = memory_info.rss() as f64 / 1024.0 / 1024.0;
+    
 
-    ram_usage_mb
+    memory_info.rss() as f64 / 1024.0 / 1024.0
 }
 
 struct ProcessUsage {
@@ -387,5 +391,5 @@ pub fn get_total_ram() -> f64{
 
     // Convert to megabytes (optional)
     let total_memory_gb = total_memory as f64 / (1024.0 * 1024.0);
-    return total_memory_gb
+    total_memory_gb
 }

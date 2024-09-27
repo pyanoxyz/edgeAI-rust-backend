@@ -1,7 +1,7 @@
 // use rust_bert::distilbert::{DistilBertConfig, DistilBertModelMaskedLM};
 use rust_bert::bert::{BertConfig, BertForMaskedLM};
 
-use rust_bert::resources::{RemoteResource, ResourceProvider, LocalResource};
+use rust_bert::resources::{RemoteResource, ResourceProvider};
 use rust_bert::Config;
 use rust_tokenizers::tokenizer::{BertTokenizer, Tokenizer, TruncationStrategy};
 use tch::{nn, Device, Tensor, no_grad};
@@ -38,7 +38,7 @@ impl AttentionCalculator {
 
         // Load DistilBERT model
         let mut vs = nn::VarStore::new(device);
-        let model = BertForMaskedLM::new(&vs.root(), &config);
+        let model = BertForMaskedLM::new(vs.root(), &config);
 
         // Load tokenizer
         let tokenizer = BertTokenizer::from_file(vocab_path.clone(), true, true)
@@ -66,7 +66,7 @@ impl AttentionCalculator {
             .forward_t(Some(&input_ids), None, None, None, None, None, None, false) // Only the last argument is a boolean
         });
 
-        let mut attention_scores: Vec<Vec<f32>> = Vec::new();
+        let attention_scores: Vec<Vec<f32>> = Vec::new();
         let mut self_attention_scores: Vec<f32> = Vec::new(); 
         if let Some(attentions) = outputs.all_attentions {
             if let Some(last_attention) = attentions.last() {
@@ -100,7 +100,7 @@ impl AttentionCalculator {
                 // Filter out special tokens ([CLS], [SEP], [PAD]) and scores below threshold
                 let valid_tokens_attention: Vec<(String, f32)> = tokens
                 .into_iter()
-                .zip(self_attention_scores.into_iter())
+                .zip(self_attention_scores)
                 .filter(|(token, score)| {
                     !["[CLS]", "[SEP]", "[PAD]"].contains(&token.as_str()) 
                     && !token.starts_with("##")
@@ -112,13 +112,13 @@ impl AttentionCalculator {
 
                 // Log the tokens and their attention
                 let (valid_tokens, valid_attention_scores): (Vec<_>, Vec<_>) = valid_tokens_attention.into_iter().unzip();
-                return Ok((valid_tokens, valid_attention_scores));
+                Ok((valid_tokens, valid_attention_scores))
 
             } else {
-                return Err(anyhow::anyhow!("No last attention scores found"));
+                Err(anyhow::anyhow!("No last attention scores found"))
             }
         } else {
-            return Err(anyhow::anyhow!("No attention output available from the model"));
+            Err(anyhow::anyhow!("No attention output available from the model"))
         }
   
     }

@@ -1,5 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, web, Error};
-use futures::future::{ready, Ready};
+use actix_web::{HttpRequest, HttpResponse};
 use serde_json::json;
 use std::collections::HashMap;
 use crate::utils::is_cloud_execution_mode;
