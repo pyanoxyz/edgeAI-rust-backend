@@ -45,6 +45,7 @@ impl DBConfig {
                 id TEXT PRIMARY KEY,  -- UUID as primary key
                 user_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
+                vec_row_id TEXT NOT NULL,
                 prompt TEXT,
                 compressed_prompt TEXT,
                 response TEXT,
@@ -89,7 +90,7 @@ impl DBConfig {
                 end_line INTEGER,
                 file_path TEXT,
                 start_line INTEGER,
-                vec_rowid TEXT NOT NULL,  -- This links to the rowid in the vec table
+                vec_row_id TEXT NOT NULL,  -- This links to the rowid in the vec table
                 timestamp TEXT            
                 );
             ",

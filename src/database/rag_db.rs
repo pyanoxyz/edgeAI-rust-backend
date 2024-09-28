@@ -12,7 +12,7 @@ use rand::Rng;
 impl DBConfig{
 
 
-    fn generate_rowid() -> u64 {
+    pub fn generate_rowid() -> u64 {
         let mut rng = rand::thread_rng();
         rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
     }
@@ -58,7 +58,7 @@ impl DBConfig{
         
         // Generate UUIDs for the child and the vector embedding
         let uuid = Uuid::new_v4().to_string();
-        let vec_row_id = Self::generate_rowid();
+        let vec_row_id: u64 = Self::generate_rowid();
     
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
@@ -67,8 +67,8 @@ impl DBConfig{
         connection.execute(
             "INSERT INTO context_children (
                 id, user_id, session_id, parent_path, chunk_type, content, compressed_content,
-                end_line, file_path, start_line, vec_rowid, timestamp
-            ) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?)",
+                end_line, file_path, start_line, vec_row_id, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 uuid,
                 user_id,

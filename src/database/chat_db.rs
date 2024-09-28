@@ -14,34 +14,36 @@ impl DBConfig{
     pub fn store_chats(&self, user_id: &str, session_id: &str, prompt: &str, compressed_prompt: &str, response: &str, embeddings: &[f32], request_type: &str) {
             
         // Lock the mutex to access the connection
-    let connection = self.connection.lock().unwrap();
-    let uuid = Uuid::new_v4().to_string();
+        let connection = self.connection.lock().unwrap();
+        let uuid = Uuid::new_v4().to_string();
+        let vec_row_id = Self::generate_rowid();
 
-    // Get the current UTC timestamp
-    let timestamp = Utc::now().to_rfc3339();
-    connection.execute(
-        "INSERT INTO chats (id, user_id, session_id, prompt, compressed_prompt, response, timestamp, request_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        params![
-            uuid,
-            user_id,
-            session_id,
-            prompt,
-            compressed_prompt,
-            response,
-            timestamp.as_str(),
-            request_type     // Store UTC timestamp as TEXT
-        ],
-    ).unwrap();
-
-    connection.execute(
-        "INSERT INTO chat_embeddings (id,  embeddings)
-            VALUES (?, ?)",
-        params![
-            session_id,
-            embeddings.as_bytes()         
+        // Get the current UTC timestamp
+        let timestamp = Utc::now().to_rfc3339();
+        connection.execute(
+            "INSERT INTO chats (id, user_id, session_id, vec_row_id, prompt, compressed_prompt, response, timestamp, request_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                uuid,
+                user_id,
+                session_id,
+                vec_row_id,
+                prompt,
+                compressed_prompt,
+                response,
+                timestamp.as_str(),
+                request_type     // Store UTC timestamp as TEXT
             ],
-    ).unwrap();
+        ).unwrap();
+
+        connection.execute(
+            "INSERT INTO chat_embeddings (rowid,  embeddings)
+                VALUES (?, ?)",
+            params![
+                vec_row_id,
+                embeddings.as_bytes()         
+                ],
+        ).unwrap();
 
     }
      

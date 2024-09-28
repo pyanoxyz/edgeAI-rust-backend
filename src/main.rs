@@ -17,6 +17,8 @@ mod prompt_compression;
 mod history;
 mod parser;
 mod rag;
+mod pair_programmer;
+
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -90,7 +92,7 @@ async fn run_llama_server() {
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     // Access the environment variables
-    let llm_server_url = env::var("LLM_SERVER_URL").expect("LLM_SERVER_URL not found");
+    let llm_server_url = env::var("LOCAL_URL").expect("LOCAL_URL not found");
     let temperature = env::var("TEMPERATURE").expect("TEMPERATURE not found");
     let cloud_execution_mode = env::var("CLOUD_EXECUTION_MODE").expect("API_KEY not found");
 

@@ -29,21 +29,37 @@ use std::sync::Arc;
 
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
+
     dotenv().ok(); // Load the .env file if it exists
     let cloud_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "false".to_string());
     cloud_mode == "true"
 }
 
 
-pub fn get_llm_server_url() -> String {
-    
-
-    env::var("LLM_SERVER_URL").unwrap_or_else(|_| {
-        eprintln!("Error: Environment variable LLM_SERVER_URL is not set.");
+pub fn get_local_url() -> String {
+    dotenv().ok(); // Load the .env file if it exists
+    env::var("LOCAL_URL").unwrap_or_else(|_| {
+        eprintln!("Error: Environment variable LOCAL_URL is not set.");
         process::exit(1); // Exit the program with an error code
     })
 }
 
+pub fn get_remote_url() -> String {
+    dotenv().ok(); // Load the .env file if it exists
+    env::var("REMOTE_URL").unwrap_or_else(|_| {
+        eprintln!("Error: Environment variable REMOTE_URL is not set.");
+        process::exit(1); // Exit the program with an error code
+    })
+}
+
+
+pub fn get_cloud_api_key() -> String {
+    dotenv().ok(); // Load the .env file if it exists
+    env::var("CLOUD_API_KEY").unwrap_or_else(|_| {
+        eprintln!("Error: Environment variable CLOUD_API_KEY is not set.");
+        process::exit(1); // Exit the program with an error code
+    })
+}
 
 pub async fn local_llm_response(
     system_prompt: &str,
@@ -78,9 +94,11 @@ pub async fn local_llm_response(
             .append_header(("X-Session-ID", session_id.to_string()))
             .streaming(formatted_stream);
         Ok(response)
+        
         }
+        
         Err(e) => {
-        error!("Local llm being executed with session_id {} and user_id {}", session_id, user_id);
+            error!("Local llm being executed with session_id {} and user_id {} {}", session_id, user_id, e);
 
         Err(actix_web::error::ErrorInternalServerError(json!({
             "error": e.to_string()
@@ -121,7 +139,6 @@ async fn local_llm_request(
 
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
     let client = Client::new();
-    debug!("Pinging Local LLM server");
     let default_prompt_template = get_default_prompt_template();
     
     //This makes the full prompt by taking the default_prompt_template that
@@ -130,7 +147,7 @@ async fn local_llm_request(
         .replace("{system_prompt}", system_prompt)
         .replace("{user_prompt}", full_user_prompt);
 
-    let llm_server_url =  get_llm_server_url();
+    let llm_server_url =  get_local_url();
     debug!("{}", full_prompt);
 
     let resp = client
@@ -172,9 +189,9 @@ async fn cloud_llm_response(
     system_prompt: &str,
     full_user_prompt: &str,
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
-    let api_url = "https://api.together.xyz/v1/chat/completions";
-    let api_key = std::env::var("TOGETHER_API_KEY")?;  // Fetch the API key from env variables
+    let api_url =  get_remote_url();
 
+    let api_key = get_cloud_api_key();
     // Prepare the dynamic JSON body for the request
     let request_body = json!({
         "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
@@ -229,17 +246,103 @@ async fn cloud_llm_response(
     // Return the receiver as a stream
     Ok(ReceiverStream::new(rx))
 }
+// pub async fn format_local_llm_response(
+//     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
+//     user_prompt: Arc<String>,    // Now wrapped in Arc for shared ownership
+//     session_id: Arc<String>,     // Wrapped in Arc
+//     user_id: Arc<String>,
+//     request_type: Arc<String>      // Wrapped in Arc
+// ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
+//     let accumulated_content = String::new();
+
+//     unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
+//         // The cloning should happen inside the async block
+//         let user_id_cloned = Arc::clone(&user_id);
+//         let session_id_cloned = Arc::clone(&session_id);
+//         let user_prompt_cloned = Arc::clone(&user_prompt);
+//         let request_type_cloned = Arc::clone(&request_type);
+
+//         async move {
+//             if let Some(chunk_result) = stream.next().await {
+//                 match chunk_result {
+//                     Ok(chunk) => {
+//                         if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+//                             let mut content_to_stream = String::new();
+//                             for line in chunk_str.lines() {
+//                                 if line.starts_with("data: ") {
+//                                     if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
+//                                         if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
+//                                             acc.push_str(content); // Accumulate content
+//                                             content_to_stream.push_str(content); // Stream content
+//                                         }
+//                                     }
+//                                 }
+//                             }
+
+//                             if !content_to_stream.is_empty() {
+//                                 // Stream the content that was extracted
+//                                 return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
+//                             }
+//                         } else {
+//                             eprintln!("Failed to parse chunk as UTF-8");
+//                         }
+//                     }
+//                     Err(e) => {
+//                         eprintln!("Error receiving chunk: {}", e);
+//                         return Some((Err(e), (stream, acc)));
+//                     }
+//                 }
+//             } else {
+//                 // End of stream, process accumulated content
+//                 if !acc.is_empty() {
+//                     debug!("Stream has ended: {}", acc);
+//                     let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
+//                     let tokens = match result {
+//                         Ok(tokens) => tokens,
+//                         Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);
+//                         return None
+//                     }
+//                     };
+//                     let embeddings_result = generate_text_embedding(&acc).await;
+                    
+//                     // Extract embeddings if the result is Ok, otherwise return None
+//                     let embeddings = match embeddings_result {
+//                         Ok(embeddings) => embeddings,
+//                         Err(_) => return None,
+//                     };
+//                     debug!("{:?}", embeddings);
+//                     let compressed_prompt = tokens.join(" ");
+//                     debug!("Compressed Prompt {:?}", compressed_prompt);
+
+//                     DB_INSTANCE.store_chats(
+//                         &user_id_cloned, 
+//                         &session_id_cloned, 
+//                         &user_prompt_cloned, 
+//                         &compressed_prompt, 
+//                         &acc, 
+//                         &embeddings[..],
+//                         &request_type_cloned
+//                     );
+
+//                 }
+//                 return None;
+//             }
+//             // In case there was no content to stream, continue to the next chunk
+//             Some((Ok(Bytes::new()), (stream, acc)))
+//         }
+//     })
+// }
+
 pub async fn format_local_llm_response(
     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-    user_prompt: Arc<String>,    // Now wrapped in Arc for shared ownership
+    user_prompt: Arc<String>,    // Wrapped in Arc for shared ownership
     session_id: Arc<String>,     // Wrapped in Arc
     user_id: Arc<String>,
-    request_type: Arc<String>      // Wrapped in Arc
+    request_type: Arc<String>    // Wrapped in Arc
 ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
     let accumulated_content = String::new();
 
     unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
-        // The cloning should happen inside the async block
         let user_id_cloned = Arc::clone(&user_id);
         let session_id_cloned = Arc::clone(&session_id);
         let user_prompt_cloned = Arc::clone(&user_prompt);
@@ -250,20 +353,10 @@ pub async fn format_local_llm_response(
                 match chunk_result {
                     Ok(chunk) => {
                         if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                            let mut content_to_stream = String::new();
-                            for line in chunk_str.lines() {
-                                if line.starts_with("data: ") {
-                                    if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
-                                        if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-                                            acc.push_str(content); // Accumulate content
-                                            content_to_stream.push_str(content); // Stream content
-                                        }
-                                    }
-                                }
-                            }
+                            let (new_acc, content_to_stream) = process_chunk(&chunk_str, &acc).await;
 
+                            acc = new_acc;
                             if !content_to_stream.is_empty() {
-                                // Stream the content that was extracted
                                 return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
                             }
                         } else {
@@ -278,44 +371,102 @@ pub async fn format_local_llm_response(
             } else {
                 // End of stream, process accumulated content
                 if !acc.is_empty() {
-                    debug!("Stream has ended: {}", acc);
-                    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
-                    let tokens = match result {
-                        Ok(tokens) => tokens,
-                        Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);
-                        return None
-                    }
-                    };
-                    let embeddings_result = generate_text_embedding(&acc).await;
-                    
-                    // Extract embeddings if the result is Ok, otherwise return None
-                    let embeddings = match embeddings_result {
-                        Ok(embeddings) => embeddings,
-                        Err(_) => return None,
-                    };
-                    debug!("{:?}", embeddings);
-                    let compressed_prompt = tokens.join(" ");
-                    debug!("Compressed Prompt {:?}", compressed_prompt);
-
-                    DB_INSTANCE.store_chats(
-                        &user_id_cloned, 
-                        &session_id_cloned, 
-                        &user_prompt_cloned, 
-                        &compressed_prompt, 
-                        &acc, 
-                        &embeddings[..],
-                        &request_type_cloned
-                    );
-
+                    handle_end_of_stream(
+                        &acc,
+                        &user_id_cloned,
+                        &session_id_cloned,
+                        &user_prompt_cloned,
+                        &request_type_cloned,
+                    )
+                    .await;
                 }
                 return None;
             }
-            // In case there was no content to stream, continue to the next chunk
+
             Some((Ok(Bytes::new()), (stream, acc)))
         }
     })
 }
 
+/// Process each chunk of the stream, extracting content and accumulating it
+async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
+    let mut accumulated_content = acc.to_string();
+    let mut content_to_stream = String::new();
+
+    for line in chunk_str.lines() {
+        if line.starts_with("data: ") {
+            if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
+                if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
+                    accumulated_content.push_str(content);  // Accumulate content
+                    content_to_stream.push_str(content);    // Stream content
+                }
+            }
+        }
+    }
+
+    (accumulated_content, content_to_stream)
+}
+
+/// Handle the end of the stream by processing accumulated content
+async fn handle_end_of_stream(
+    acc: &str,
+    user_id: &Arc<String>,
+    session_id: &Arc<String>,
+    user_prompt: &Arc<String>,
+    request_type: &Arc<String>,
+) {
+    debug!("Stream has ended: {}", acc);
+
+    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
+    let tokens = match result {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            println!("Error while unwrapping tokens: {:?}", e);
+            return;
+        }
+    };
+
+    let embeddings_result = generate_text_embedding(acc).await;
+    let embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => return,
+    };
+
+    let compressed_prompt = tokens.join(" ");
+    debug!("Compressed Prompt {:?}", compressed_prompt);
+
+    store_in_db(
+        user_id,
+        session_id,
+        user_prompt,
+        &compressed_prompt,
+        acc,
+        embeddings.as_slice(),
+        request_type,
+    )
+    .await;
+}
+
+/// Store the processed content and embeddings into the database
+async fn store_in_db(
+    user_id: &Arc<String>,
+    session_id: &Arc<String>,
+    user_prompt: &Arc<String>,
+    compressed_prompt: &str,
+    acc: &str,
+    embeddings: &[f32],
+    request_type: &Arc<String>,
+) {
+    DB_INSTANCE.store_chats(
+        user_id,
+        session_id,
+        user_prompt,
+        compressed_prompt,
+        acc,
+        embeddings,
+        request_type,
+    );
+}
 
 pub fn calculate_cpu_usage(pid: u32, interval: Option<u64>) -> f64 {
     // Create a new process object

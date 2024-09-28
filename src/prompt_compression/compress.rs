@@ -155,7 +155,7 @@ impl AttentionCalculator {
     }
 }
 
-fn modify_config_file(file_path: &str, new_key: &str, new_value: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn modify_config_file(file_path: &str, new_key: &str, new_value: bool) -> Result<(), Box<dyn std::error::Error>> {
     // Check if the file exists
     if !Path::new(file_path).exists() {
         return Err("Config file not found".into());
@@ -216,7 +216,7 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
         fs::copy(config_path, &config_dest)?;
         debug!("Config saved to {}", config_dest);
         //Ifthis key is not added to the config.json files, The model will stop giving out attention scores
-        modify_config_file(&config_dest, "output_attentions", "true");
+        modify_config_file(&config_dest, "output_attentions", true);
 
     } else {
         debug!("Config already exists at {}. Skipping.", config_dest);
