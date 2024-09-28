@@ -1,5 +1,6 @@
 
 use crate::utils::get_total_ram;
+use log::{debug, info};
 
 const LLAMA_PROMPT_TEMPLATE: &str = r#"
     <|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>
@@ -19,10 +20,11 @@ const QWEN_PROMPT_TEMPLATE: &str = r#"
     "#;
 
 pub fn get_default_prompt_template() -> String {
-    let gb_in_bytes: u64 = 8 * 1024 * 1024 * 1024; // 8GB in bytes
-
+    let total_ram = get_total_ram();
+    let gb_in_bytes: u64 = 10 * 1024 ; // 8GB
+    info!("SYSTEM RAM {} and gb_in_bytes is {} ", total_ram, gb_in_bytes);
     // Assuming get_total_ram() returns the total system RAM in bytes
-    if get_total_ram() < gb_in_bytes as f64 {
+    if total_ram < gb_in_bytes as f64 {
         LLAMA_PROMPT_TEMPLATE.to_string() // Return the Llama template if RAM is less than 8GB
     } else {
         QWEN_PROMPT_TEMPLATE.to_string() // Return the Qwen template if RAM is 8GB or more

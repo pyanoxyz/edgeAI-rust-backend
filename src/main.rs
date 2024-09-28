@@ -1,4 +1,5 @@
 use actix_web::{get, post, web, App, HttpServer, HttpResponse, Responder};
+use pair_programmer::pair_programmer_api::pair_programmer_generate_steps;
 use serde::{Deserialize, Serialize};
 use env_logger::Env;
 use log::info;
@@ -121,6 +122,7 @@ async fn main() -> std::io::Result<()> {
             .configure(chats::chat_docstring_routes)  // Add docstring routes
             .configure(history::histoy_register_routes)  // Add chat explain routes
             .configure(rag::code_rag_api::register_routes)  // Add chat explain routes
+            .configure(pair_programmer::pair_programmer_api::register_routes)  // Add chat explain routes
 
     })
     .bind("localhost:52556")?

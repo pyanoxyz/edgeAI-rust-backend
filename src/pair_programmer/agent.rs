@@ -91,69 +91,47 @@ fn load_env() {
     dotenv::from_path(dotenv_path).ok();
 }
 
-
 #[async_trait]
 pub trait Agent: Send + Sync {
-    fn new(name: String, user_prompt: String, system_prompt: String, api_endpoint: String) -> Self;
-    fn get_prompt(&self) -> String;
-    async fn execute(&self) -> Result<(), ActixError>;
-    fn to_string(&self) -> String;
-}
-
-pub struct LocalAgent {
-    name: String,
-    user_prompt: String,
-    prompt_with_context:String,
-    system_prompt: String,
-    cloud_execution_mode: bool
-}
-
-#[async_trait]
-impl Agent for LocalAgent {
-    fn new(name: String, user_prompt: String, prompt_with_context: String, system_prompt: String) -> Self {
-        // Load environment variables
-
-        let cloud_execution_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "False".to_string()) == "True";
-        LocalAgent {
-            name,
-            user_prompt,
-            prompt_with_context,
-            system_prompt,
-            cloud_execution_mode
-        }
-    }
+    fn new(user_prompt: String, prompt_with_context: String) -> Self;
 
     fn get_prompt(&self) -> String {
         let llm_prompt_template = get_default_prompt_template();
         llm_prompt_template
-            .replace("{system_prompt}", &self.system_prompt)
-            .replace("{user_prompt}", &self.user_prompt)
+            .replace("{system_prompt}", &self.get_system_prompt())
+            .replace("{user_prompt}", &self.get_user_prompt())
     }
 
-    async fn execute(&self) -> Result<(), actix_web::Error> {
+    async fn execute(&self) -> Result<HttpResponse, ActixError> {
         let prompt = self.get_prompt();
-    
-        if self.cloud_execution_mode {
+
+        if is_cloud_execution_mode() {
             // Remote execution when cloud_execution_mode is enabled
-            remote_agent_execution(&self.system_prompt, &self.prompt_with_context)
+            remote_agent_execution(&self.get_system_prompt(), &self.get_prompt_with_context())
                 .await
-                .map_err(|e| {
-                    actix_web::Error::from(ErrorInternalServerError(e.to_string()))  
-                })?;
+                .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))
         } else {
             // Local execution when running in local mode
-            local_agent_execution(&self.system_prompt, &self.user_prompt, &self.prompt_with_context)
-                .await
-                .map_err(|e| {
-                    actix_web::Error::from(ErrorInternalServerError(e.to_string()))  
-                })?;
+            local_agent_execution(
+                &self.get_system_prompt(),
+                &self.get_user_prompt(),
+                &self.get_prompt_with_context(),
+            )
+            .await
+            .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))
         }
-    
-        Ok(())  // Return Ok if everything went well
+
     }
+
     fn to_string(&self) -> String {
-        format!("LocalAgent(name='{}')", self.name)
+        format!("Agent(name='{}')", self.get_name())
     }
+
+    // Helper methods that concrete types must implement
+    fn get_name(&self) -> String;
+    fn get_user_prompt(&self) -> String;
+    fn get_system_prompt(&self) -> String;
+    fn get_prompt_with_context(&self) -> String;
 }
 
 pub async fn local_agent_execution(
