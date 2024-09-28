@@ -108,31 +108,6 @@ pub struct LocalAgent {
     cloud_execution_mode: bool
 }
 
-
-#[derive(Debug)]
-struct CustomError {
-    message: String,  // Store the error message as a string
-}
-
-impl fmt::Display for CustomError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl StdError for CustomError {}
-
-impl From<ActixError> for CustomError {
-    fn from(source: ActixError) -> Self {
-        CustomError { message: source.to_string() }  // Convert the actix error to a string
-    }
-}
-impl ResponseError for CustomError {}
-
-// This ensures CustomError can be transferred between threads
-unsafe impl Send for CustomError {}
-unsafe impl Sync for CustomError {}
-
 #[async_trait]
 impl Agent for LocalAgent {
     fn new(name: String, user_prompt: String, prompt_with_context: String, system_prompt: String) -> Self {
@@ -196,30 +171,26 @@ pub async fn local_agent_execution(
         }
         Err(e) => {
             error!("Local LLM execution error in Pair programmer: {}", e);
-            Err(Box::new(CustomError {
-                message: e.to_string(),
-            }) as Box<dyn StdError + Send + Sync + 'static>)
+            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
         }
     }
 }
+
 pub async fn remote_agent_execution(
     system_prompt: &str,
     prompt_with_context: &str,
 ) -> Result<HttpResponse, Box<dyn StdError + Send + Sync + 'static>> {
     match cloud_llm_response(system_prompt, prompt_with_context).await {
         Ok(stream) => {
-            let response = HttpResponse::Ok()
-                .streaming(stream);
+            let response = HttpResponse::Ok().streaming(stream);
             Ok(response)
         }
         Err(e) => {
-            error!("Remote agent execution error in Pair programmer {}", e);
-            Err(Box::new(CustomError {
-                message: e.to_string(),
-            }) as Box<dyn StdError + Send + Sync + 'static>)        }
+            error!("Remote agent execution error in Pair programmer: {}", e);
+            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
+        }
     }
 }
-
 
 async fn local_llm_request(
     system_prompt: &str,
