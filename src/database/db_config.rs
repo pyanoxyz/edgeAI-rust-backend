@@ -1,12 +1,13 @@
 
-use rusqlite::{ffi::sqlite3_auto_extension, Connection};
-use sqlite_vec::sqlite3_vec_init;
 use std::fs;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use sqlite_vec::sqlite3_vec_init;
+use rusqlite::{ffi::sqlite3_auto_extension, Connection};
 
 pub struct DBConfig {
     pub connection: Mutex<Connection>,  // Wrapping the connection in Mutex for thread-safe access
+    pub pair_programmer_connection: Mutex<Connection>
 }
 
 impl DBConfig {
@@ -19,14 +20,19 @@ impl DBConfig {
             fs::create_dir_all(&pyano_data_dir).unwrap();
         }
         let pyano_db_file = pyano_data_dir.join("chats.db");
+        let pair_programmer_db_file = pyano_data_dir.join("pair_programmer.db");
+
         // Register the sqlite-vec extension to support vector operations
         unsafe {
             sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
         }        
         let connection: Connection = Connection::open(&pyano_db_file).unwrap();
+        let pair_programmer_connection: Connection = Connection::open(&pair_programmer_db_file).unwrap();
+
 
         let db_config = DBConfig {
             connection: Mutex::new(connection),  // Wrapping the connection
+            pair_programmer_connection: Mutex::new(pair_programmer_connection)
         };
 
         db_config.create_chat_table();
@@ -56,6 +62,44 @@ impl DBConfig {
             [],  // Empty array for parameters since none are needed
         ).unwrap();
     }
+
+    pub fn create_pair_programmer_table(&self){
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS pair_programmer (
+                id TEXT PRIMARY KEY,  -- UUID as primary key,
+                user_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                steps TEXT,
+                timestamp TEXT
+            );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
+    pub fn create_pair_programmer_steps_table(&self){
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS pair_programmer_steps (
+                id TEXT PRIMARY KEY,  -- UUID as primary key,
+                pair_programmer_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                heading TEXT NOT NULL,
+                function_call TEXT NOT NULL,
+                executed INTEGER NOT NULL,
+                response TEXT,
+                timestamp TEXT,
+                chat TEXT
+            );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
 
     //Saves the individual chunks in the table
     pub fn create_parent_context_table(&self){
