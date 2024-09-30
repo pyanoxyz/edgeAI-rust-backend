@@ -6,6 +6,7 @@ use rusqlite::params;
 use serde_json::{json, Value};
 use crate::database::db_config::DBConfig;
 use crate::pair_programmer::pair_programmer_types::{Step, StepChat};
+use log::info;
 
 impl DBConfig{
 
@@ -57,22 +58,22 @@ impl DBConfig{
 
                 ],
             ).unwrap();
-
+            info!("Inserting step {:?}", step);
         }
 
     }
     
 
-    pub fn fetch_steps(&self, pair_programming_id: &str) -> Vec<Value> {
+    pub fn fetch_steps(&self, pair_programmer_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection
-        let connection = self.connection.lock().unwrap();
+        let connection = self.pair_programmer_connection.lock().unwrap();
         
         // Prepare a SQL query to fetch all the steps for a specific pair_programming_id
         let mut stmt = connection
             .prepare(
-                "SELECT step_id, user_id, session_id, heading, function_call, executed, response, chat, timestamp 
+                "SELECT id, user_id, session_id, heading, function_call, executed, response, chat, timestamp 
                  FROM pair_programmer_steps 
-                 WHERE pair_programming_id = ?",
+                 WHERE pair_programmer_id = ?",
             )
             .unwrap();
         
@@ -81,7 +82,7 @@ impl DBConfig{
         
         // Execute the query and iterate over the rows, collecting them into the vector
         let step_iter = stmt
-            .query_map([pair_programming_id], |row| {
+            .query_map([pair_programmer_id], |row| {
                 Ok(json!({
                     "step_id": row.get::<_, String>(0)?,         // step_id
                     "user_id": row.get::<_, String>(1)?,         // user_id

@@ -11,13 +11,8 @@ use tokio::sync::mpsc;
 use bytes::Bytes;
 use futures::stream::unfold;
 use serde_json::Value;
-use actix_web::{error::ErrorInternalServerError, error::ResponseError, HttpResponse,  Error as ActixError};
-use log::{error};
-use anyhow::anyhow;
-use thiserror::Error;
-use std::fmt;
 use std::error::Error as StdError;  // Importing the correct trait
-use anyhow::Error as AnyhowError;  // Import anyhow's Error type
+use actix_web::http::header;
 
 use std::process;
 use futures_util::stream::TryStreamExt;
@@ -25,14 +20,14 @@ use tokio_stream::{wrappers::ReceiverStream, Stream};
 use futures::StreamExt;
 use reqwest::Error as ReqwestError;
 use regex::Regex;
+use actix_web::{HttpResponse, Error as ActixError};
+use log::error;
  // Using anyhow for error handling
 // use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
 use crate::database::db_config::DB_INSTANCE;
 use crate::pair_programmer::pair_programmer_types::Step;
-
-use super::pair_programmer_api;
 
 // Custom logger would need to be implemented for logging
 // Define your logger similar to the python logger if needed
@@ -180,6 +175,7 @@ pub trait Agent: Send + Sync {
 
     }
 
+
     fn to_string(&self) -> String {
         format!("Agent(name='{}')", self.get_name())
     }
@@ -214,7 +210,9 @@ pub async fn local_agent_execution(
                                                         Arc::clone(&pair_programmer_owned) 
                                                     )
                                                         .await;
-            let response = HttpResponse::Ok().streaming(formatted_stream);
+            let response = HttpResponse::Ok()
+            .append_header((header::HeaderName::from_static("x-pair-programmer-id"), pair_programmer_id)) // Add custom header
+            .streaming(formatted_stream);
             Ok(response)
         }
         Err(e) => {

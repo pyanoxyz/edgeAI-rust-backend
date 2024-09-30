@@ -1,5 +1,6 @@
 
 use std::fs;
+use log::info;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use sqlite_vec::sqlite3_vec_init;
@@ -47,6 +48,7 @@ impl DBConfig {
     
     pub fn create_chat_table(&self){
         let connection = self.connection.lock().unwrap();
+        info!("Checking for <chats> Table");
         connection.execute(
             "
             CREATE TABLE IF NOT EXISTS chats (
@@ -66,6 +68,8 @@ impl DBConfig {
     }
 
     pub fn create_pair_programmer_table(&self){
+        info!("Checking for <pair_programmer> Table");
+
         let connection = self.pair_programmer_connection.lock().unwrap();
         connection.execute(
             "
@@ -83,6 +87,8 @@ impl DBConfig {
     }
 
     pub fn create_pair_programmer_steps_table(&self){
+        info!("Checking for <pair_programmer_steps> Table");
+
         let connection = self.pair_programmer_connection.lock().unwrap();
         connection.execute(
             "
@@ -106,6 +112,8 @@ impl DBConfig {
 
     //Saves the individual chunks in the table
     pub fn create_parent_context_table(&self){
+        info!("Checking for <context_parent> Table");
+
         let connection = self.connection.lock().unwrap();
         connection.execute(
             "
@@ -123,6 +131,8 @@ impl DBConfig {
 
     //Saves the individual chunks in the table
     pub fn create_children_context_table(&self){
+        info!("Checking for <context_children> Table");
+
         let connection = self.connection.lock().unwrap();
         connection.execute(
             "
@@ -147,6 +157,8 @@ impl DBConfig {
 
     
     pub fn create_context_embeddings(&self){
+        info!("Checking for <context_embeddings> Table");
+
         let connection = self.connection.lock().unwrap();
         let table_exists: bool = connection
         .query_row(
@@ -169,6 +181,8 @@ impl DBConfig {
 
 
     pub fn create_chat_embeddings(&self){
+        info!("Checking for <chat_embeddings> Table");
+
         let connection = self.connection.lock().unwrap();
         let table_exists: bool = connection
         .query_row(
