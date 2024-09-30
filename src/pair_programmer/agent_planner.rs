@@ -8,18 +8,19 @@ pub struct PlannerAgent {
     prompt_with_context: String,
 }
 
-#[async_trait]
-impl Agent for PlannerAgent {
-    fn new(user_prompt: String, prompt_with_context: String) -> Self {
+impl PlannerAgent {
+    pub fn new(user_prompt: String, prompt_with_context: String) -> Self {
         PlannerAgent {
             user_prompt,
             prompt_with_context,
         }
     }
-
+}
+#[async_trait]
+impl Agent for PlannerAgent {
     // Implementing the required trait methods for PlannedAgent
     fn get_name(&self) -> String {
-        let name: &str = "Agent-Planner";
+        let name: &str = "planner";
         return name.to_string()    }
 
     fn get_user_prompt(&self) -> String {

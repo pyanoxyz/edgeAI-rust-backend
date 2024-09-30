@@ -142,7 +142,7 @@ fn load_env() {
 
 #[async_trait]
 pub trait Agent: Send + Sync {
-    fn new(user_prompt: String, prompt_with_context: String) -> Self;
+    // fn new(user_prompt: String, prompt_with_context: String) -> Self;
 
     fn get_prompt(&self) -> String {
         let llm_prompt_template = get_default_prompt_template();
