@@ -4,7 +4,6 @@ use log::debug;
 use reqwest::Client;
 use serde_json::json;
 use std::env;
-use std::sync::Arc;
 use crate::platform_variables::get_default_prompt_template;
 // use std::error::Error as StdError;
 use tokio::sync::mpsc;
@@ -12,82 +11,19 @@ use bytes::Bytes;
 use futures::stream::unfold;
 use serde_json::Value;
 use std::error::Error as StdError;  // Importing the correct trait
-use actix_web::http::header;
-
+use std::pin::Pin;
+use futures::{Stream, StreamExt}; // Ensure StreamExt is imported
+use std::sync::{Arc, Mutex};    
 use std::process;
 use futures_util::stream::TryStreamExt;
-use tokio_stream::{wrappers::ReceiverStream, Stream};
-use futures::StreamExt;
 use reqwest::Error as ReqwestError;
-use regex::Regex;
-use actix_web::{HttpResponse, Error as ActixError};
+use actix_web::Error as ActixError;
 use log::error;
- // Using anyhow for error handling
-// use reqwest::Error as ReqwestError;
-use crate::embeddings::text_embeddings::generate_text_embedding;
-use crate::prompt_compression::compress::get_attention_scores;
-use crate::database::db_config::DB_INSTANCE;
-use crate::pair_programmer::pair_programmer_types::Step;
-
-// Custom logger would need to be implemented for logging
-// Define your logger similar to the python logger if needed
-
-fn parse_steps(input: &str) -> Vec<Step> {
-    // Regex for matching the step number and description
-    let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap();
-    
-    // Regex for matching the tool, allowing spaces and tool names with hyphens
-    let re_tool = Regex::new(r"(?i)\s*Tool\s*:\s*([\w\-]+)").unwrap();
-    
-    // Regex for matching the action, including function name and parameters
-    let re_action = Regex::new(r#"(?i)\s*Action\s*:\s*<function=([^>]+)>\s*\{\{(.+?)\}\}\s*</function>"#).unwrap();
-    
-    let mut steps = Vec::new();
-    let mut current_step_number = 0;
-    let mut current_heading = String::new();
-    let mut current_tool = String::new();
-    let mut current_action = String::new();
-
-    for line in input.lines() {
-        let trimmed_line = line.trim();
-        
-        if let Some(caps) = re_step.captures(trimmed_line) {
-            // Push the previous step if exists
-            if current_step_number > 0 {
-                steps.push(Step {
-                    step_number: current_step_number,
-                    heading: current_heading.clone(),
-                    tool: current_tool.clone(),
-                    action: current_action.clone(),
-                });
-            }
-
-            // Start a new step
-            current_step_number = caps[1].parse().unwrap_or(0);
-            current_heading = caps[2].to_string();
-            current_tool.clear();
-            current_action.clear();
-        } else if let Some(caps) = re_tool.captures(trimmed_line) {
-            current_tool = caps[1].to_string();
-        } else if let Some(caps) = re_action.captures(trimmed_line) {
-            current_action = format!("<function={}>{{{{{}}}}}", &caps[1], &caps[2]);
-        }
-    }
-
-    // Add the last step if it exists
-    if current_step_number > 0 {
-        steps.push(Step {
-            step_number: current_step_number,
-            heading: current_heading.clone(),
-            tool: current_tool.clone(),
-            action: current_action.clone(),
-        });
-    }
-
-    steps
-}
+use tokio_stream::wrappers::ReceiverStream;
 
 
+
+pub type AccumulatedStream = Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>;
 
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
@@ -154,30 +90,33 @@ pub trait Agent: Send + Sync {
             .replace("{user_prompt}", &self.get_user_prompt())
     }
 
-    async fn execute(&self, user_id: &str, session_id: &str, pair_programmer_id: &str) -> Result<HttpResponse, ActixError> {
+    async fn execute(&self) -> Result<AccumulatedStream, ActixError> {
         let prompt = self.get_prompt();
 
-        if is_cloud_execution_mode() {
-            // Remote execution when cloud_execution_mode is enabled
+        let stream: AccumulatedStream = if is_cloud_execution_mode() {
             remote_agent_execution(&self.get_system_prompt(), &self.get_prompt_with_context())
                 .await
-                .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))
+                .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
         } else {
-            // Local execution when running in local mode
-            local_agent_execution(
-                &self.get_system_prompt(),
-                &self.get_user_prompt(),
-                &self.get_prompt_with_context(),
-                user_id,
-                session_id, 
-                pair_programmer_id
-            )
-            .await
-            .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))
-        }
+            local_agent_execution(&self.get_system_prompt(), &self.get_prompt_with_context())
+                .await
+                .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
+        };
 
+        let accumulated_content = Arc::new(Mutex::new(String::new()));
+        let accumulated_content_clone = Arc::clone(&accumulated_content);
+
+        let accumulated_stream = stream.inspect(move |chunk_result| {
+            if let Ok(chunk) = chunk_result {
+                if let Ok(chunk_str) = std::str::from_utf8(chunk) {
+                    let mut accumulated = accumulated_content_clone.lock().unwrap();
+                    accumulated.push_str(chunk_str);
+                }
+            }
+        });
+
+        Ok(Box::pin(accumulated_stream))
     }
-
 
     fn to_string(&self) -> String {
         format!("Agent(name='{}')", self.get_name())
@@ -190,33 +129,16 @@ pub trait Agent: Send + Sync {
     fn get_prompt_with_context(&self) -> String;
 }
 
+
 pub async fn local_agent_execution(
     system_prompt: &str,
-    user_prompt: &str,
-    prompt_with_context: &str,
-    user_id: &str, 
-    session_id: &str,
-    pair_programmer_id: &str
-) -> Result<HttpResponse, Box<dyn StdError + Send + Sync + 'static>> {
+    prompt_with_context: &str
+) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>, Box<dyn StdError + Send + Sync + 'static>> {
     let llm_temperature = get_llm_temperature();
     match local_llm_request(system_prompt, prompt_with_context, llm_temperature).await {
         Ok(stream) => {
-            let prompt_owned = Arc::new(user_prompt.to_owned());
-            let user_id_owned = Arc::new(user_id.to_owned());
-            let session_id_owned = Arc::new(session_id.to_owned());
-            let pair_programmer_owned = Arc::new(pair_programmer_id.to_owned());
-            
-            let formatted_stream = format_local_llm_response(stream,                 
-                                                        Arc::clone(&prompt_owned),
-                                                        Arc::clone(&user_id_owned), 
-                                                        Arc::clone(&session_id_owned),
-                                                        Arc::clone(&pair_programmer_owned) 
-                                                    )
-                                                        .await;
-            let response = HttpResponse::Ok()
-            .append_header((header::HeaderName::from_static("x-pair-programmer-id"), pair_programmer_id)) // Add custom header
-            .streaming(formatted_stream);
-            Ok(response)
+            let formatted_stream = format_local_llm_response(stream).await;
+            Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
         }
         Err(e) => {
             error!("Local LLM execution error in Pair programmer: {}", e);
@@ -225,21 +147,60 @@ pub async fn local_agent_execution(
     }
 }
 
-pub async fn remote_agent_execution(
-    system_prompt: &str,
-    prompt_with_context: &str,
-) -> Result<HttpResponse, Box<dyn StdError + Send + Sync + 'static>> {
-    match cloud_llm_response(system_prompt, prompt_with_context).await {
-        Ok(stream) => {
-            let response = HttpResponse::Ok().streaming(stream);
-            Ok(response)
+
+
+pub async fn format_local_llm_response<'a>(
+    stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin + 'a,
+) -> impl Stream<Item = Result<Bytes, ReqwestError>> + 'a {
+    let acc = String::new(); // Initialize accumulator
+
+    unfold((stream, acc), move |(mut stream, mut acc)| {
+
+        async move {
+            if let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(chunk) => {
+                        if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+                            let  content_to_stream = process_chunk(chunk_str, &acc).await;
+
+                            if !content_to_stream.is_empty() {
+                                return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
+                            }
+                        } else {
+                            eprintln!("Failed to parse chunk as UTF-8");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error receiving chunk: {}", e);
+                        return Some((Err(e), (stream, acc)));
+                    }
+                }
+            } else {
+                // End of stream, mark the stream as done
+                return None; // Stream is done
+            }
+
+            Some((Ok(Bytes::new()), (stream, acc)))
         }
-        Err(e) => {
-            error!("Remote agent execution error in Pair programmer: {}", e);
-            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
+    })
+}
+/// Process each chunk of the stream, extracting content and accumulating it
+async fn process_chunk(chunk_str: &str, acc: &str) -> String {
+    let mut content_to_stream = String::new();
+
+    for line in chunk_str.lines() {
+        if line.starts_with("data: ") {
+            if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
+                if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
+                    content_to_stream.push_str(content);    // Stream content
+                }
+            }
         }
     }
+
+    content_to_stream
 }
+
 
 async fn local_llm_request(
     system_prompt: &str,
@@ -257,7 +218,7 @@ async fn local_llm_request(
         .replace("{user_prompt}", prompt_with_context);
 
     let llm_server_url =  get_local_url();
-    debug!("{}", full_prompt);
+    debug!("{} with temperature {}", full_prompt, temperature);
 
     let resp = client
         .post(format!("{}/completions",  llm_server_url))
@@ -291,6 +252,22 @@ async fn local_llm_request(
 
     // Return the receiver as a stream of bytes
     Ok(ReceiverStream::new(rx))
+}
+
+
+pub async fn remote_agent_execution(
+    system_prompt: &str,
+    prompt_with_context: &str,
+) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>, Box<dyn StdError + Send + Sync + 'static>> {
+    match cloud_llm_response(system_prompt, prompt_with_context).await {
+        Ok(stream) => {
+            Ok(Box::pin(stream)) // Pin the stream here using Box::pin
+        }
+        Err(e) => {
+            error!("Remote agent execution error in Pair programmer: {}", e);
+            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
+        }
+    }
 }
 
 
@@ -354,135 +331,4 @@ async fn cloud_llm_response(
 
     // Return the receiver as a stream
     Ok(ReceiverStream::new(rx))
-}
-
-pub async fn format_local_llm_response<'a>(
-    stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin + 'a,
-    user_prompt: Arc<String>,
-    user_id: Arc<String>,
-    session_id: Arc<String>,
-    pair_programmer_id: Arc<String>
-) -> impl Stream<Item = Result<Bytes, ReqwestError>> + 'a {
-    let accumulated_content = String::new();
-
-    unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
-        let user_prompt_cloned = Arc::clone(&user_prompt);
-        let user_id_cloned = Arc::clone(&user_id);
-        let session_id_cloned = Arc::clone(&session_id);
-        let pair_programmer_id_cloned = Arc::clone(&pair_programmer_id);
-
-        async move {
-            if let Some(chunk_result) = stream.next().await {
-                match chunk_result {
-                    Ok(chunk) => {
-                        if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                            let (new_acc, content_to_stream) = process_chunk(&chunk_str, &acc).await;
-
-                            acc = new_acc;
-                            if !content_to_stream.is_empty() {
-                                return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
-                            }
-                        } else {
-                            eprintln!("Failed to parse chunk as UTF-8");
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error receiving chunk: {}", e);
-                        return Some((Err(e), (stream, acc)));
-                    }
-                }
-            } else {
-                // End of stream, process accumulated content
-                if !acc.is_empty() {
-                    handle_end_of_stream(
-                        &acc,
-                        &user_prompt_cloned,
-                        &user_id_cloned,
-                        &session_id_cloned,
-                        &pair_programmer_id_cloned
-                    )
-                    .await;
-                }
-                return None;
-            }
-
-            Some((Ok(Bytes::new()), (stream, acc)))
-        }
-    })
-}
-
-
-/// Process each chunk of the stream, extracting content and accumulating it
-async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
-    let mut accumulated_content = acc.to_string();
-    let mut content_to_stream = String::new();
-
-    for line in chunk_str.lines() {
-        if line.starts_with("data: ") {
-            if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
-                if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-                    accumulated_content.push_str(content);  // Accumulate content
-                    content_to_stream.push_str(content);    // Stream content
-                }
-            }
-        }
-    }
-
-    (accumulated_content, content_to_stream)
-}
-
-/// Handle the end of the stream by processing accumulated content
-/// This user_prompt is the original prompt that user has gave us
-/// not the prompt with context because that has already been passed in llm_request
-async fn handle_end_of_stream(
-    input: &str,
-    user_prompt: &Arc<String>,
-    user_id: &Arc<String>,
-    session_id: &Arc<String>,
-    pair_programmer_id: &Arc<String>
-) {
-    debug!("Stream has ended: {}", input);
-    let steps = parse_steps(input);
-    for step in &steps {
-        println!("{:?}", step);
-    }
-    DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, pair_programmer_id, user_prompt, &steps); 
-
-
-    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&input).await;
-    let tokens = match result {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            println!("Error while unwrapping tokens: {:?}", e);
-            return;
-        }
-    };
-
-    let embeddings_result = generate_text_embedding(input).await;
-    let embeddings = match embeddings_result {
-        Ok(embeddings) => embeddings,
-        Err(_) => return,
-    };
-
-}
-
-/// Store the processed content and embeddings into the database
-async fn store_in_db(
-    user_id: &Arc<String>,
-    session_id: &Arc<String>,
-    user_prompt: &Arc<String>,
-    compressed_prompt: &str,
-    acc: &str,
-    embeddings: &[f32],
-    request_type: &Arc<String>,
-) {
-    DB_INSTANCE.store_chats(
-        user_id,
-        session_id,
-        user_prompt,
-        compressed_prompt,
-        acc,
-        embeddings,
-        request_type,
-    );
 }

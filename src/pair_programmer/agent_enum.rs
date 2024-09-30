@@ -3,32 +3,31 @@ use crate::pair_programmer::{agent_planner::PlannerAgent,
     agent_native_llm::NativeLLMAgent,
     agent_system_code::SystemCodeAgent,
     agent_rethinker::RethinkerAgent,
-    agent::Agent};
+    agent::{Agent, AccumulatedStream}};
 use async_trait::async_trait;
 use actix_web::{HttpResponse, Error as ActixError};
 
 pub enum AgentEnum {
-    GenerateCode(GenerateCodeAgent),
-    NativeLLM(NativeLLMAgent),
-    Planner(PlannerAgent),
-    Rethinker(RethinkerAgent),
-    SystemCode(SystemCodeAgent),
+    GenerateCode(Box<dyn Agent>),
+    NativeLLM(Box<dyn Agent>),
+    Planner(Box<dyn Agent>),
+    Rethinker(Box<dyn Agent>),
+    SystemCode(Box<dyn Agent>),
 }
 
 
 impl AgentEnum {
     pub fn new(agent_type: &str, user_prompt: String, prompt_with_context: String) -> Result<Self, ActixError> {
         match agent_type {
-            "generate-code" => Ok(AgentEnum::GenerateCode(GenerateCodeAgent::new(user_prompt, prompt_with_context))),
-            "system-code" => Ok(AgentEnum::SystemCode(SystemCodeAgent::new(user_prompt, prompt_with_context))),
-            "llm" => Ok(AgentEnum::NativeLLM(NativeLLMAgent::new(user_prompt, prompt_with_context))),
-            "planner" => Ok(AgentEnum::Planner(PlannerAgent::new(user_prompt, prompt_with_context))),
-            "rethinker" => Ok(AgentEnum::Rethinker(RethinkerAgent::new(user_prompt, prompt_with_context))),
+            "generate-code" => Ok(AgentEnum::GenerateCode(Box::new(GenerateCodeAgent::new(user_prompt, prompt_with_context)))),
+            "system-code" => Ok(AgentEnum::SystemCode(Box::new(SystemCodeAgent::new(user_prompt, prompt_with_context)))),
+            "llm" => Ok(AgentEnum::NativeLLM(Box::new(NativeLLMAgent::new(user_prompt, prompt_with_context)))),
+            "planner" => Ok(AgentEnum::Planner(Box::new(PlannerAgent::new(user_prompt, prompt_with_context)))),
+            "rethinker" => Ok(AgentEnum::Rethinker(Box::new(RethinkerAgent::new(user_prompt, prompt_with_context)))),
             _ => Err(actix_web::error::ErrorInternalServerError(format!("Unknown agent type: {}", agent_type)).into()),
         }
     }
 }
-
 #[async_trait]
 impl Agent for AgentEnum {
 
@@ -72,13 +71,13 @@ impl Agent for AgentEnum {
         }
     }
 
-    async fn execute(&self, user_id: &str, session_id: &str, pair_programmer_id: &str) -> Result<HttpResponse, ActixError> {
+    async fn execute(&self) -> Result<AccumulatedStream, ActixError> {
         match self {
-            AgentEnum::GenerateCode(agent) => agent.execute(user_id, session_id, pair_programmer_id).await,
-            AgentEnum::NativeLLM(agent) => agent.execute(user_id, session_id, pair_programmer_id).await,
-            AgentEnum::Planner(agent) => agent.execute(user_id, session_id, pair_programmer_id).await,
-            AgentEnum::Rethinker(agent) => agent.execute(user_id, session_id, pair_programmer_id).await,
-            AgentEnum::SystemCode(agent) => agent.execute(user_id, session_id, pair_programmer_id).await,
+            AgentEnum::GenerateCode(agent) => agent.execute().await,
+            AgentEnum::NativeLLM(agent) => agent.execute().await,
+            AgentEnum::Planner(agent) => agent.execute().await,
+            AgentEnum::Rethinker(agent) => agent.execute().await,
+            AgentEnum::SystemCode(agent) => agent.execute().await,
         }
     }
 }
