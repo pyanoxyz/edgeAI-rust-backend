@@ -24,15 +24,69 @@ use futures_util::stream::TryStreamExt;
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use futures::StreamExt;
 use reqwest::Error as ReqwestError;
+use regex::Regex;
  // Using anyhow for error handling
 // use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
 use crate::database::db_config::DB_INSTANCE;
+use crate::pair_programmer::pair_programmer_types::Step;
+
+use super::pair_programmer_api;
+
 // Custom logger would need to be implemented for logging
 // Define your logger similar to the python logger if needed
 
 
+
+fn parse_steps(input: &str) -> Vec<Step> {
+    // Updated regex to capture step number and heading
+    let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap(); // Case-insensitive match for "Step X: heading"
+    let re_tool = Regex::new(r"(?i)\s*Tool\s*:\s*`([\w\-]+)`\s*").unwrap(); // Handle spaces and allow hyphenated tool names
+    let re_action = Regex::new(r#"(?i)\s*Action\s*:\s*`<function=([^>]+)>\s*\{\{(.+?)\}\}\s*</function>`"#).unwrap(); // Handle spaces and missing </function>
+
+    let mut steps = Vec::new();
+    let mut current_step_number = 0;
+    let mut current_heading = String::new();
+    let mut current_tool = String::new();
+    let mut current_action = String::new();
+
+    for line in input.lines() {
+        let trimmed_line = line.trim(); // Trim leading and trailing whitespace
+        if let Some(caps) = re_step.captures(trimmed_line) {
+            // Save the previous step before starting a new one
+            if current_step_number > 0 {
+                steps.push(Step {
+                    step_number: current_step_number,
+                    heading: current_heading.clone(),
+                    tool: current_tool.clone(),
+                    action: current_action.clone(),
+                });
+            }
+            // Start a new step, capture step number and heading
+            current_step_number = caps[1].parse().unwrap_or(0);
+            current_heading = caps[2].to_string();
+            current_tool.clear();
+            current_action.clear();
+        } else if let Some(caps) = re_tool.captures(trimmed_line) {
+            current_tool = caps[1].to_string();
+        } else if let Some(caps) = re_action.captures(trimmed_line) {
+            current_action = format!("<function={}>{{{{{}}}}}", &caps[1], &caps[2]); // Capture full action with lazy matching
+        }
+    }
+
+    // Add the last step if it exists
+    if current_step_number > 0 {
+        steps.push(Step {
+            step_number: current_step_number,
+            heading: current_heading.clone(),
+            tool: current_tool.clone(),
+            action: current_action.clone(),
+        });
+    }
+
+    steps
+}
 
 
 
@@ -102,7 +156,7 @@ pub trait Agent: Send + Sync {
             .replace("{user_prompt}", &self.get_user_prompt())
     }
 
-    async fn execute(&self) -> Result<HttpResponse, ActixError> {
+    async fn execute(&self, user_id: &str, session_id: &str, pair_programmer_id: &str) -> Result<HttpResponse, ActixError> {
         let prompt = self.get_prompt();
 
         if is_cloud_execution_mode() {
@@ -116,6 +170,9 @@ pub trait Agent: Send + Sync {
                 &self.get_system_prompt(),
                 &self.get_user_prompt(),
                 &self.get_prompt_with_context(),
+                user_id,
+                session_id, 
+                pair_programmer_id
             )
             .await
             .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))
@@ -138,12 +195,25 @@ pub async fn local_agent_execution(
     system_prompt: &str,
     user_prompt: &str,
     prompt_with_context: &str,
+    user_id: &str, 
+    session_id: &str,
+    pair_programmer_id: &str
 ) -> Result<HttpResponse, Box<dyn StdError + Send + Sync + 'static>> {
     let llm_temperature = get_llm_temperature();
     match local_llm_request(system_prompt, prompt_with_context, llm_temperature).await {
         Ok(stream) => {
             let prompt_owned = Arc::new(user_prompt.to_owned());
-            let formatted_stream = format_local_llm_response(stream, prompt_owned.clone()).await;
+            let user_id_owned = Arc::new(user_id.to_owned());
+            let session_id_owned = Arc::new(session_id.to_owned());
+            let pair_programmer_owned = Arc::new(pair_programmer_id.to_owned());
+            
+            let formatted_stream = format_local_llm_response(stream,                 
+                                                        Arc::clone(&prompt_owned),
+                                                        Arc::clone(&user_id_owned), 
+                                                        Arc::clone(&session_id_owned),
+                                                        Arc::clone(&pair_programmer_owned) 
+                                                    )
+                                                        .await;
             let response = HttpResponse::Ok().streaming(formatted_stream);
             Ok(response)
         }
@@ -285,14 +355,20 @@ async fn cloud_llm_response(
     Ok(ReceiverStream::new(rx))
 }
 
-pub async fn format_local_llm_response(
-    stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-    user_prompt: Arc<String>,    // Wrapped in Arc for shared ownership
-) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
+pub async fn format_local_llm_response<'a>(
+    stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin + 'a,
+    user_prompt: Arc<String>,
+    user_id: Arc<String>,
+    session_id: Arc<String>,
+    pair_programmer_id: Arc<String>
+) -> impl Stream<Item = Result<Bytes, ReqwestError>> + 'a {
     let accumulated_content = String::new();
 
     unfold((stream, accumulated_content), move |(mut stream, mut acc)| {
         let user_prompt_cloned = Arc::clone(&user_prompt);
+        let user_id_cloned = Arc::clone(&user_id);
+        let session_id_cloned = Arc::clone(&session_id);
+        let pair_programmer_id_cloned = Arc::clone(&pair_programmer_id);
 
         async move {
             if let Some(chunk_result) = stream.next().await {
@@ -320,6 +396,9 @@ pub async fn format_local_llm_response(
                     handle_end_of_stream(
                         &acc,
                         &user_prompt_cloned,
+                        &user_id_cloned,
+                        &session_id_cloned,
+                        &pair_programmer_id_cloned
                     )
                     .await;
                 }
@@ -330,6 +409,7 @@ pub async fn format_local_llm_response(
         }
     })
 }
+
 
 /// Process each chunk of the stream, extracting content and accumulating it
 async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
@@ -351,13 +431,24 @@ async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
 }
 
 /// Handle the end of the stream by processing accumulated content
+/// This user_prompt is the original prompt that user has gave us
+/// not the prompt with context because that has already been passed in llm_request
 async fn handle_end_of_stream(
-    acc: &str,
+    input: &str,
     user_prompt: &Arc<String>,
+    user_id: &Arc<String>,
+    session_id: &Arc<String>,
+    pair_programmer_id: &Arc<String>
 ) {
-    debug!("Stream has ended: {}", acc);
+    debug!("Stream has ended: {}", input);
+    let steps = parse_steps(input);
+    for step in &steps {
+        println!("{:?}", step);
+    }
+    DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, pair_programmer_id, user_prompt, &steps); 
 
-    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
+
+    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&input).await;
     let tokens = match result {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -366,24 +457,12 @@ async fn handle_end_of_stream(
         }
     };
 
-    let embeddings_result = generate_text_embedding(acc).await;
+    let embeddings_result = generate_text_embedding(input).await;
     let embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
         Err(_) => return,
     };
 
-    // let compressed_prompt = tokens.join(" ");
-    // debug!("Compressed Prompt {:?}", compressed_prompt);
-
-    // store_in_db(
-    //     user_id,
-    //     session_id,
-    //     user_prompt,
-    //     &compressed_prompt,
-    //     acc,
-    //     embeddings.as_slice(),
-    // )
-    // .await;
 }
 
 /// Store the processed content and embeddings into the database

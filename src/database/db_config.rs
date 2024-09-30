@@ -40,6 +40,8 @@ impl DBConfig {
         db_config.create_parent_context_table();
         db_config.create_children_context_table();
         db_config.create_context_embeddings();
+        db_config.create_pair_programmer_steps_table();
+        db_config.create_pair_programmer_table();
         db_config
     }
     
@@ -71,6 +73,7 @@ impl DBConfig {
                 id TEXT PRIMARY KEY,  -- UUID as primary key,
                 user_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
+                task TEXT NOT NULL,
                 steps TEXT,
                 timestamp TEXT
             );

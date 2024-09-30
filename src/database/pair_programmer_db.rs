@@ -1,12 +1,11 @@
 
 
 use rand::Rng;
-use uuid::Uuid;
 use chrono::Utc; // For getting the current UTC timestamp
 use rusqlite::params;
 use serde_json::{json, Value};
 use crate::database::db_config::DBConfig;
-use crate::pair_programmer::pair_programmer_types::{PairProgrammerStep, StepChat};
+use crate::pair_programmer::pair_programmer_types::{Step, StepChat};
 
 impl DBConfig{
 
@@ -17,28 +16,28 @@ impl DBConfig{
     }
 
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
-    pub fn store_new_pair_programming_session(&self, user_id: &str, session_id: &str, steps: &Vec<PairProgrammerStep>) {
+    pub fn store_new_pair_programming_session(&self, user_id: &str, session_id: &str, pair_programmer_id: &str, task: &str, steps: &Vec<Step>) {
             
         // Lock the mutex to access the connection
         let connection = self.pair_programmer_connection.lock().unwrap();
-        let pair_programming_id = Uuid::new_v4().to_string();
         let serialized_steps = serde_json::to_string(&steps).unwrap();
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
         connection.execute(
-            "INSERT INTO pair_programmer (id, user_id, session_id, steps, timestamp)
-                VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO pair_programmer (id, user_id, session_id, task, steps, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)",
             params![
-                pair_programming_id,
+                pair_programmer_id,
                 user_id,
                 session_id,
+                task,
                 serialized_steps,
                 timestamp.as_str(),
             ],
         ).unwrap();
 
         for (index, step) in steps.iter().enumerate() {
-            let step_id = format!("{}_{}", pair_programming_id, index+1);
+            let step_id = format!("{}_{}", pair_programmer_id, index+1);
             let serialized_chat = serde_json::to_string(&Vec::<StepChat>::new()).unwrap();
 
             connection.execute(
@@ -46,13 +45,13 @@ impl DBConfig{
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     step_id, 
-                    pair_programming_id,
+                    pair_programmer_id,
                     user_id,
                     session_id,
                     step.heading,
-                    step.function_call,
+                    step.tool,
                     0,
-                    step.response,
+                    "",
                     timestamp.as_str(),
                     serialized_chat,
 
@@ -88,7 +87,7 @@ impl DBConfig{
                     "user_id": row.get::<_, String>(1)?,         // user_id
                     "session_id": row.get::<_, String>(2)?,      // session_id
                     "heading": row.get::<_, String>(3)?,         // heading
-                    "function_call": row.get::<_, String>(4)?,   // function_call
+                    "tool": row.get::<_, String>(4)?,   // function_call
                     "executed": row.get::<_, bool>(5)?,          // executed (boolean)
                     "response": row.get::<_, String>(6)?,        // response
                     "chat": row.get::<_, String>(7)?,            // chat (assuming it's serialized as JSON or a string)

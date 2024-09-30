@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use crate::request_type::RequestType;
 use crate::pair_programmer::agent_planner::PlannerAgent;
 use crate::pair_programmer::agent::Agent;
+use uuid::Uuid;
+
 use serde_json::json;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateStepsRequest {
@@ -42,8 +44,10 @@ pub async fn pair_programmer_generate_steps(data: web::Json<GenerateStepsRequest
         })));
     }
 
+    let pair_programmer_id = Uuid::new_v4().to_string();
+
     let planner_agent = PlannerAgent::new(data.task.clone(), data.task.clone());
-    planner_agent.execute()
+    planner_agent.execute(&user_id, &session_id, &pair_programmer_id)
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(json!({
