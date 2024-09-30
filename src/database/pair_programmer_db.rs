@@ -105,4 +105,19 @@ impl DBConfig{
         steps
     }
 
+    pub fn update_step_execution(&self, pair_programmer_id: &str, step_number: &str, response: &str) ->Result<(), rusqlite::Error>  {
+            
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+
+        let sql = "UPDATE pair_programmer_steps SET response = ?1, executed = 1 WHERE id = ?2";
+        connection.execute(sql, params![response, step_id])?;
+        Ok(())
+
+    }
+    
+
+
+
 }
