@@ -19,7 +19,7 @@ mod history;
 mod parser;
 mod rag;
 mod pair_programmer;
-
+mod summarization;
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
