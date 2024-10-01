@@ -7,9 +7,9 @@ use serde_json::{json, Value};
 use crate::database::db_config::DBConfig;
 use crate::pair_programmer::pair_programmer_types::{Step, StepChat};
 use log::info;
+use std::error::Error;
 
 impl DBConfig{
-
 
     pub fn generate_pair_programmer_id() -> u64 {
         let mut rng = rand::thread_rng();
@@ -17,13 +17,25 @@ impl DBConfig{
     }
 
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
-    pub fn store_new_pair_programming_session(&self, user_id: &str, session_id: &str, pair_programmer_id: &str, task: &str, steps: &Vec<Step>) {
-            
+    pub fn store_new_pair_programming_session(
+        &self, 
+        user_id: &str, 
+        session_id: &str, 
+        pair_programmer_id: &str, 
+        task: &str, 
+        steps: &Vec<Step>
+    ) -> Result<(), Box<dyn Error>> {
+        
         // Lock the mutex to access the connection
-        let connection = self.pair_programmer_connection.lock().unwrap();
-        let serialized_steps = serde_json::to_string(&steps).unwrap();
+        let connection = self.pair_programmer_connection.lock()
+            .map_err(|_| "Failed to acquire lock for connection")?;
+        
+        let serialized_steps = serde_json::to_string(&steps)
+            .map_err(|_| "Failed to serialize steps")?;
+        
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
+        
         connection.execute(
             "INSERT INTO pair_programmer (id, user_id, session_id, task, steps, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)",
@@ -35,12 +47,13 @@ impl DBConfig{
                 serialized_steps,
                 timestamp.as_str(),
             ],
-        ).unwrap();
-
+        ).map_err(|e| format!("Failed to insert pair_programmer record: {}", e))?;
+        
         for (index, step) in steps.iter().enumerate() {
-            let step_id = format!("{}_{}", pair_programmer_id, index+1);
-            let serialized_chat = serde_json::to_string(&Vec::<StepChat>::new()).unwrap();
-
+            let step_id = format!("{}_{}", pair_programmer_id, index + 1);
+            let serialized_chat = serde_json::to_string(&Vec::<StepChat>::new())
+                .map_err(|_| "Failed to serialize chat")?;
+            
             connection.execute(
                 "INSERT INTO pair_programmer_steps (id, pair_programmer_id, user_id, session_id, heading, function_call, executed, response, timestamp, chat)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -55,12 +68,13 @@ impl DBConfig{
                     "",
                     timestamp.as_str(),
                     serialized_chat,
-
                 ],
-            ).unwrap();
+            ).map_err(|e| format!("Failed to insert pair_programmer_steps record: {}", e))?;
+            
             info!("Inserting step {:?}", step);
         }
-
+        
+        Ok(())
     }
     
 

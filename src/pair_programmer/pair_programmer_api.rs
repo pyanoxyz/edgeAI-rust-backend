@@ -1,6 +1,6 @@
 use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
 use serde::{Deserialize, Serialize};
-use crate::pair_programmer::{agent_planner::PlannerAgent, agent_enum::AgentEnum};
+use crate::pair_programmer::agent_enum::AgentEnum;
 use crate::pair_programmer::agent::Agent;
 use uuid::Uuid;
 use crate::database::db_config::DB_INSTANCE;
@@ -13,7 +13,7 @@ use crate::prompt_compression::compress::get_attention_scores;
 use std::sync::{Arc, Mutex};    
 use futures_util::StreamExt; // Import this trait for accessing `.next()`
 use async_stream::stream;
-use crate::pair_programmer::pair_programmer_utils::{rethink_prompt_with_context, parse_steps, validate_steps, parse_step_number, format_steps, prompt_with_context, prompt_with_context_for_chat };
+use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 use serde_json::json;
 
 #[derive(Debug, Serialize)]
@@ -71,19 +71,19 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 /// Handle the end of the stream by processing accumulated content
 /// This user_prompt is the original prompt that user has gave us
 /// not the prompt with context because that has already been passed in llm_request
-async fn parse_steps_and_store(
-    input: &str,
-    user_prompt: &str,
-    user_id: &str,
-    session_id: &str,
-    pair_programmer_id: &str
-) {
-    let steps = parse_steps(input);
-    for step in &steps {
-        println!("{:?}", step);
-    }
-    DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, pair_programmer_id, user_prompt, &steps); 
-}
+// async fn parse_steps_and_store(
+//     input: &str,
+//     user_prompt: &str,
+//     user_id: &str,
+//     session_id: &str,
+//     pair_programmer_id: &str
+// ) {
+//     let steps = parse_steps(input);
+//     for step in &steps {
+//         println!("{:?}", step);
+//     }
+//     DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, pair_programmer_id, user_prompt, &steps); 
+// }
 
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
@@ -113,80 +113,103 @@ pub async fn pair_programmer_generate_steps(
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
     let pair_programmer_id = Uuid::new_v4().to_string();
+    let agent = AgentEnum::new("planner", data.task.clone(), data.task.clone())?;
 
-    let planner_agent = PlannerAgent::new(data.task.clone(), data.task.clone());
 
-    let stream_result = planner_agent.execute().await;
-    let mut stream = match stream_result {
-        Ok(s) => s,
-        Err(e) => {
-            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": format!("Local LLM response error: {}", e)
-            })));
-        }
-    };
-
-    // Create a channel to wait for the stream completion
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-    // Stream chunks to the client in real time and accumulate
-    let response_stream = stream! {
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                        // Accumulate the content in memory
-                        {
-                            let mut accumulated = accumulated_content_clone.lock().unwrap();
-                            accumulated.push_str(chunk_str);
-                        }
+    // Start streaming and sending data to the client
+    let response = stream_to_client(
+        agent,
+        pair_programmer_id.clone(),
+        accumulated_content_clone,
+        tx,
+    ).await?;
 
-                        // Yield each chunk to the stream
-                        yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
-                    }
-                }
-                Err(e) => {
-                    yield Err(actix_web::error::ErrorInternalServerError(format!(
-                        "Error while streaming: {}",
-                        e
-                    )));
-                }
-            }
-        }
-
-        // Notify that streaming is complete
-        let _ = tx.send(());
-    };
-
-    // Return the response as a streaming body
-    let response = HttpResponse::Ok()
-        .content_type("application/json")
-        .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
-        .streaming(response_stream);
-
-    // Wait for the streaming to complete before unwrapping the accumulated content
+    // Clone the necessary values to move them into the async task
+    let task_clone = data.task.clone();
+    let user_id_clone = user_id.clone();
+    let session_id_clone = session_id.clone();
+    // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        // Wait until the channel receives the completion signal
-        let _ = rx.await;
-
-        // Unwrap the accumulated content after streaming is done
-        let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-            .unwrap_or_else(|_| Mutex::new(String::new()))
-            .into_inner()
-            .unwrap();
-
-        // Print the accumulated content after streaming is completed
-        println!("Final accumulated content: {}", accumulated_content_final);
-        parse_steps_and_store(
-            &accumulated_content_final,
-            &data.task.clone(),
-            &user_id,
-            &session_id,
-            &pair_programmer_id
-        ).await;
+        handle_stream_completion_planner(rx, accumulated_content, &task_clone, &user_id_clone, &session_id_clone, pair_programmer_id).await;
+        
     });
 
+
     Ok(response)
+
+    // let stream_result = planner_agent.execute().await;
+    // let mut stream = match stream_result {
+    //     Ok(s) => s,
+    //     Err(e) => {
+    //         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+    //             "error": format!("Local LLM response error: {}", e)
+    //         })));
+    //     }
+    // };
+
+    // // Create a channel to wait for the stream completion
+    // let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+    // // Stream chunks to the client in real time and accumulate
+    // let response_stream = stream! {
+    //     while let Some(chunk_result) = stream.next().await {
+    //         match chunk_result {
+    //             Ok(chunk) => {
+    //                 if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+    //                     // Accumulate the content in memory
+    //                     {
+    //                         let mut accumulated = accumulated_content_clone.lock().unwrap();
+    //                         accumulated.push_str(chunk_str);
+    //                     }
+
+    //                     // Yield each chunk to the stream
+    //                     yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 yield Err(actix_web::error::ErrorInternalServerError(format!(
+    //                     "Error while streaming: {}",
+    //                     e
+    //                 )));
+    //             }
+    //         }
+    //     }
+
+    //     // Notify that streaming is complete
+    //     let _ = tx.send(());
+    // };
+
+    // // Return the response as a streaming body
+    // let response = HttpResponse::Ok()
+    //     .content_type("application/json")
+    //     .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
+    //     .streaming(response_stream);
+
+    // // Wait for the streaming to complete before unwrapping the accumulated content
+    // tokio::spawn(async move {
+    //     // Wait until the channel receives the completion signal
+    //     let _ = rx.await;
+
+    //     // Unwrap the accumulated content after streaming is done
+    //     let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+    //         .unwrap_or_else(|_| Mutex::new(String::new()))
+    //         .into_inner()
+    //         .unwrap();
+
+    //     // Print the accumulated content after streaming is completed
+    //     println!("Final accumulated content: {}", accumulated_content_final);
+    //     parse_steps_and_store(
+    //         &accumulated_content_final,
+    //         &data.task.clone(),
+    //         &user_id,
+    //         &session_id,
+    //         &pair_programmer_id
+    //     ).await;
+    // });
+
+    // Ok(response)
 }
 
 
@@ -230,66 +253,41 @@ pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
         }
     };
 
+
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
+    let step_number = &valid_data.step_number;
+    let(step_number, 
+        task_heading, 
+        function_call, 
+        _, 
+        all_steps, 
+        steps_executed_so_far, 
+        _) = data_validation(&pair_programmer_id, step_number).unwrap();
 
 
-    // Parse the step_number
-    let step_number = parse_step_number(&valid_data.step_number)?;
-    info!("step_number={}", step_number);
-
-    // Fetch the steps from the database
-    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
-    // Check if the steps can be executed
-    match validate_steps(step_number, &steps){
-        Ok(_) => {},
-        Err(error) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": format!("{}", error),
-            })));        
-        }
-    }
-    let step = &steps[step_number];
-
-    //TODO: Last step execution shall also be given in context and also the chat
-    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
-
-    let function_call = step.get("tool")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest(format!("Invalid step: 'tool' field is missing or not a string {}", step_number))
-        })
-        .unwrap();
-
-    let task_heading = step.get("heading")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string {}", step_number))
-        })
-        .unwrap();
-
-    let task_with_context=   prompt_with_context(&all_steps, &steps_executed_so_far, task_heading, "", "");
+    let task_with_context=   prompt_with_context(&all_steps, &steps_executed_so_far, &task_heading, "", "");
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new(function_call, task_heading.to_string(), task_with_context)?;
+    let agent = AgentEnum::new(&function_call, task_heading.to_string(), task_with_context)?;
 
     // This variable will accumulate the entire content of the stream
-      let accumulated_content = Arc::new(Mutex::new(String::new()));
-      let accumulated_content_clone = Arc::clone(&accumulated_content);
-      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let accumulated_content = Arc::new(Mutex::new(String::new()));
+    let accumulated_content_clone = Arc::clone(&accumulated_content);
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-      // Start streaming and sending data to the client
-      let response = stream_to_client(
-          agent,
-          pair_programmer_id.clone(),
-          accumulated_content_clone,
-          tx,
-      ).await?;
-  
-      // Spawn a separate task to handle the stream completion
-      tokio::spawn(async move {
-          handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_number).await;
-      });
-  
-      Ok(response)
+    // Start streaming and sending data to the client
+    let response = stream_to_client(
+        agent,
+        pair_programmer_id.clone(),
+        accumulated_content_clone,
+        tx,
+    ).await?;
+
+    // Spawn a separate task to handle the stream completion
+    tokio::spawn(async move {
+        handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_number).await;
+    });
+
+    Ok(response)
 
 }
 
@@ -388,42 +386,20 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
         }
     };
 
+
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
+    let step_number = &valid_data.step_number;
     let prompt = valid_data.prompt.clone();
 
-
-    // Parse the step_number
-    let step_number = parse_step_number(&valid_data.step_number)?;
-    info!("step_number={}", step_number);
-    let true_step_number = step_number -1;
-
-    // Fetch the steps from the database
-    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
-    // Check if the steps can be executed
-    match validate_steps(step_number, &steps){
-        Ok(_) => {},
-        Err(error) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": format!("{}", error),
-            })));        
-        }
-    }
-    let step = &steps[true_step_number];
-
-    //TODO: Last step execution shall also be given in context and also the chat
-    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
-
-    let step_chats = DB_INSTANCE.get_step_chat(&pair_programmer_id, &step_number.to_string());
-    info!("Chat history {:?}", step_chats);
+    let(step_number, 
+        task_heading, 
+        _, 
+        step_chat, 
+        all_steps, 
+        steps_executed_so_far, 
+        _) = data_validation(&pair_programmer_id, step_number).unwrap();
     
-    let task_heading = step.get("heading")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string {}", true_step_number))
-        })
-        .unwrap();
-
-    let task_with_context=   prompt_with_context_for_chat(&all_steps, &steps_executed_so_far, task_heading, &prompt, "");
+    let task_with_context=   prompt_with_context_for_chat(&all_steps, &steps_executed_so_far, &task_heading, &prompt, "");
     // Match the function call and return the appropriate agent
     let agent = AgentEnum::new("chat", task_heading.to_string(), task_with_context)?;
 
@@ -448,6 +424,9 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
 
     Ok(response)
 }
+
+
+
 
 #[post("/pair-programmer/steps/rethink")]
 pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
@@ -474,43 +453,18 @@ pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
     };
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
-    // Parse the step_number
-    let step_number = parse_step_number(&valid_data.step_number)?;
-    info!("step_number={}", step_number);
-    let true_step_number = step_number -1;
+    let step_number = &valid_data.step_number;
 
-    // Fetch the steps from the database
-    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
-    // Check if the steps can be executed
-    match validate_steps(step_number, &steps){
-        Ok(_) => {},
-        Err(error) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": format!("{}", error),
-            })));        
-        }
-    }
-    let step = &steps[true_step_number];
-    let step_chat = match DB_INSTANCE.step_chat_string(&pair_programmer_id, &step_number.to_string()){
-        Ok(chat) => chat,
-        Err(err) => {
-            let error_response = ErrorResponse{
-                error: format!("Failed to retrieve chat: {}", err),
-            };
-            return Ok(HttpResponse::InternalServerError().json(error_response));
-        }
-    };
-
+    let(step_number, 
+        task_heading, 
+        _, 
+        step_chat, 
+        all_steps, 
+        steps_executed_so_far, 
+        _) = data_validation(&pair_programmer_id, step_number).unwrap();
     
-    let task_heading = step.get("heading")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string {}", true_step_number))
-        })
-        .unwrap();
-    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
 
-    let task_with_context=   rethink_prompt_with_context(&all_steps, &steps_executed_so_far, task_heading, &step_chat);
+    let task_with_context=   rethink_prompt_with_context(&all_steps, &steps_executed_so_far, &task_heading, &step_chat);
     // Match the function call and return the appropriate agent
     let agent = AgentEnum::new("rethinker", task_heading.to_string(), task_with_context)?;
 
@@ -663,5 +617,33 @@ async fn handle_stream_completion_execute(
     match  db_response {
         Ok(_) => {debug!("DB Update successful for executing pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
         Err(err) => {error!("Error updating executing pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
+    }
+}
+
+async fn handle_stream_completion_planner(
+    rx: tokio::sync::oneshot::Receiver<()>,
+    accumulated_content: Arc<Mutex<String>>,
+    task: &str,
+    user_id: &str,
+    session_id: &str,
+    pair_programmer_id: String
+    ) {
+    // Wait until the channel receives the completion signal
+    let _ = rx.await;
+
+    // Unwrap the accumulated content after streaming is done
+    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+        .unwrap_or_else(|_| Mutex::new(String::new()))
+        .into_inner()
+        .unwrap();
+    let steps = parse_steps(&accumulated_content_final);
+
+    // Print the accumulated content after streaming is completed
+    println!("Final accumulated content: {}", accumulated_content_final);
+
+    let db_response= DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, &pair_programmer_id, task, &steps);
+    match  db_response {
+        Ok(_) => {debug!("DB Update successful for planning the task at id {} and number of steps step {}", pair_programmer_id, steps.len())},
+        Err(err) => {error!("Error inserting for planning the task at id {} and number of steps step {} with error {:?}",  pair_programmer_id, steps.len(), err);}
     }
 }
