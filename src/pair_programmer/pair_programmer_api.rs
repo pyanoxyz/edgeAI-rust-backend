@@ -274,78 +274,22 @@ pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
     // This variable will accumulate the entire content of the stream
       let accumulated_content = Arc::new(Mutex::new(String::new()));
       let accumulated_content_clone = Arc::clone(&accumulated_content);
-  
-    
-      let stream_result = agent.execute().await;
-      let mut stream = match stream_result {
-          Ok(s) => s,
-          Err(e) => {
-              return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                  "error": format!("Local LLM response error: {}", e)
-              })));
-          }
-      };
-  
-      // Create a channel to wait for the stream completion
       let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-      // Stream chunks to the client in real time and accumulate
-      let response_stream = stream! {
-          while let Some(chunk_result) = stream.next().await {
-              match chunk_result {
-                  Ok(chunk) => {
-                      if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                          // Accumulate the content in memory
-                          {
-                              let mut accumulated = accumulated_content_clone.lock().unwrap();
-                              accumulated.push_str(chunk_str);
-                          }
+      // Start streaming and sending data to the client
+      let response = stream_to_client(
+          agent,
+          pair_programmer_id.clone(),
+          accumulated_content_clone,
+          tx,
+      ).await?;
   
-                          // Yield each chunk to the stream
-                          yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
-                      }
-                  }
-                  Err(e) => {
-                      yield Err(actix_web::error::ErrorInternalServerError(format!(
-                          "Error while streaming: {}",
-                          e
-                      )));
-                  }
-              }
-          }
-  
-          // Notify that streaming is complete
-          let _ = tx.send(());
-      };
-  
-      // Return the response as a streaming body
-      let response = HttpResponse::Ok()
-          .content_type("application/json")
-          .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
-          .streaming(response_stream);
-  
-      // Wait for the streaming to complete before unwrapping the accumulated content
+      // Spawn a separate task to handle the stream completion
       tokio::spawn(async move {
-          // Wait until the channel receives the completion signal
-          let _ = rx.await;
-  
-          // Unwrap the accumulated content after streaming is done
-          let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-              .unwrap_or_else(|_| Mutex::new(String::new()))
-              .into_inner()
-              .unwrap();
-  
-          // Print the accumulated content after streaming is completed
-          println!("Final accumulated content: {}", accumulated_content_final);
-          let db_response = DB_INSTANCE.update_step_execution(&pair_programmer_id.clone(), &step_number.to_string(), &accumulated_content_final);
-            match  db_response {
-                Ok(_) => {debug!("DB Update successful for executing pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
-                Err(err) => {error!("Error updating executing pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
-            }
-
+          handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_number).await;
       });
-
-    Ok(response)
+  
+      Ok(response)
 
 }
 
@@ -469,14 +413,6 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
     //TODO: Last step execution shall also be given in context and also the chat
     let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
 
-    // let function_call = step.get("tool")
-    //     .and_then(|v| v.as_str())
-    //     .ok_or_else(|| {
-    //         actix_web::error::ErrorBadRequest(format!("Invalid step: 'tool' field is missing or not a string {}", step_number))
-    //     })
-    //     .unwrap();
-
-    //here we also use step number because the indexing in the database starts with 1 not 0.
     let step_chats = DB_INSTANCE.get_step_chat(&pair_programmer_id, &step_number.to_string());
     info!("Chat history {:?}", step_chats);
     
@@ -492,82 +428,25 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
     let agent = AgentEnum::new("chat", task_heading.to_string(), task_with_context)?;
 
     // This variable will accumulate the entire content of the stream
+
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-    
-    let stream_result = agent.execute().await;
-    let mut stream = match stream_result {
-          Ok(s) => s,
-          Err(e) => {
-              return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                  "error": format!("Local LLM response error: {}", e)
-              })));
-          }
-      };
-  
-      // Create a channel to wait for the stream completion, the receiver will wait till the end of the stream
-      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    // Start streaming and sending data to the client
+    let response = stream_to_client(
+        agent,
+        pair_programmer_id.clone(),
+        accumulated_content_clone,
+        tx,
+    ).await?;
 
-      // Stream chunks to the client in real time and accumulate
-      let response_stream = stream! {
-          while let Some(chunk_result) = stream.next().await {
-              match chunk_result {
-                  Ok(chunk) => {
-                      if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                          // Accumulate the content in memory
-                          {
-                              let mut accumulated = accumulated_content_clone.lock().unwrap();
-                              accumulated.push_str(chunk_str);
-                          }
-  
-                          // Yield each chunk to the stream
-                          yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
-                      }
-                  }
-                  Err(e) => {
-                      yield Err(actix_web::error::ErrorInternalServerError(format!(
-                          "Error while streaming: {}",
-                          e
-                      )));
-                  }
-              }
-          }
-  
-          // Notify that streaming is complete
-          let _ = tx.send(());
-      };
-  
-      // Return the response as a streaming body
-      let response = HttpResponse::Ok()
-          .content_type("application/json")
-          .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
-          .streaming(response_stream);
-  
-      // Wait for the streaming to complete before unwrapping the accumulated content
-      tokio::spawn(async move {
-          // Wait until the channel receives the completion signal
-          let _ = rx.await;
-  
-          // Unwrap the accumulated content after streaming is done
-          let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-              .unwrap_or_else(|_| Mutex::new(String::new()))
-              .into_inner()
-              .unwrap();
-  
-          // Print the accumulated content after streaming is completed
-          println!("Final accumulated content: {}", accumulated_content_final);
-          //here step number should be step_number not tru_step_number because the steps are being stored rom an index 1 rather then zero.
-          let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
-            match  db_response {
-                Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
-                Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
-            }
-
-      });
+    // Spawn a separate task to handle the stream completion
+    tokio::spawn(async move {
+        handle_stream_completion_chat(rx, accumulated_content, pair_programmer_id, &prompt, step_number).await;
+    });
 
     Ok(response)
-
 }
 
 #[post("/pair-programmer/steps/rethink")]
@@ -635,81 +514,154 @@ pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
     // Match the function call and return the appropriate agent
     let agent = AgentEnum::new("rethinker", task_heading.to_string(), task_with_context)?;
 
-    // This variable will accumulate the entire content of the stream
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-    
-    let stream_result = agent.execute().await;
-    let mut stream = match stream_result {
-          Ok(s) => s,
-          Err(e) => {
-              return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                  "error": format!("Local LLM response error: {}", e)
-              })));
-          }
-      };
-  
-      // Create a channel to wait for the stream completion, the receiver will wait till the end of the stream
-      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    // Start streaming and sending data to the client
+    let response = stream_to_client(
+        agent,
+        pair_programmer_id.clone(),
+        accumulated_content_clone,
+        tx,
+    ).await?;
 
-      // Stream chunks to the client in real time and accumulate
-      let response_stream = stream! {
-          while let Some(chunk_result) = stream.next().await {
-              match chunk_result {
-                  Ok(chunk) => {
-                      if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                          // Accumulate the content in memory
-                          {
-                              let mut accumulated = accumulated_content_clone.lock().unwrap();
-                              accumulated.push_str(chunk_str);
-                          }
-  
-                          // Yield each chunk to the stream
-                          yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
-                      }
-                  }
-                  Err(e) => {
-                      yield Err(actix_web::error::ErrorInternalServerError(format!(
-                          "Error while streaming: {}",
-                          e
-                      )));
-                  }
-              }
-          }
-  
-          // Notify that streaming is complete
-          let _ = tx.send(());
-      };
-  
-      // Return the response as a streaming body
-      let response = HttpResponse::Ok()
-          .content_type("application/json")
-          .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
-          .streaming(response_stream);
-  
-      // Wait for the streaming to complete before unwrapping the accumulated content
-      tokio::spawn(async move {
-          // Wait until the channel receives the completion signal
-          let _ = rx.await;
-  
-          // Unwrap the accumulated content after streaming is done
-          let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-              .unwrap_or_else(|_| Mutex::new(String::new()))
-              .into_inner()
-              .unwrap();
-  
-          // Print the accumulated content after streaming is completed
-          println!("Final accumulated content: {}", accumulated_content_final);
-          //here step number should be step_number not tru_step_number because the steps are being stored rom an index 1 rather then zero.
-        //   let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
-        //     match  db_response {
-        //         Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
-        //         Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
-        //     }
-
-      });
+    // Spawn a separate task to handle the stream completion
+    tokio::spawn(async move {
+        handle_stream_completion_rethinker(rx, accumulated_content, pair_programmer_id, step_number).await;
+    });
 
     Ok(response)
 
+}
+
+async fn stream_to_client(
+    agent: AgentEnum,
+    pair_programmer_id: String,
+    accumulated_content_clone: Arc<Mutex<String>>,
+    tx: tokio::sync::oneshot::Sender<()>
+) -> Result<HttpResponse, Error> {
+    let stream_result = agent.execute().await;
+    let mut stream = match stream_result {
+        Ok(s) => s,
+        Err(e) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Local LLM response error: {}", e)
+            })));
+        }
+    };
+
+    // Stream chunks to the client in real-time and accumulate
+    let response_stream = stream! {
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+                        // Accumulate the content in memory
+                        {
+                            let mut accumulated = accumulated_content_clone.lock().unwrap();
+                            accumulated.push_str(chunk_str);
+                        }
+
+                        // Yield each chunk to the stream
+                        yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
+                    }
+                }
+                Err(e) => {
+                    yield Err(actix_web::error::ErrorInternalServerError(format!(
+                        "Error while streaming: {}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        // Notify that streaming is complete
+        let _ = tx.send(());
+    };
+
+    // Return the response as a streaming body
+    let response = HttpResponse::Ok()
+        .content_type("application/json")
+        .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
+        .streaming(response_stream);
+
+    Ok(response)
+}
+
+async fn handle_stream_completion_rethinker(
+    rx: tokio::sync::oneshot::Receiver<()>,
+    accumulated_content: Arc<Mutex<String>>,
+    pair_programmer_id: String,
+    step_number: usize
+) {
+    // Wait until the channel receives the completion signal
+    let _ = rx.await;
+
+    // Unwrap the accumulated content after streaming is done
+    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+        .unwrap_or_else(|_| Mutex::new(String::new()))
+        .into_inner()
+        .unwrap();
+
+    // Print the accumulated content after streaming is completed
+    println!("Final accumulated content: {}", accumulated_content_final);
+
+    // Update step chat in the database after the stream completes
+    // if let Err(err) = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &accumulated_content_final) {
+    //     error!("Error updating chats array pair_programmer_id {} and step {}: {:?}", pair_programmer_id, step_number, err);
+    // } else {
+    //     debug!("DB Update successful for chat array pair_programmer_id {} and step {}", pair_programmer_id, step_number);
+    // }
+}
+
+async fn handle_stream_completion_chat(
+    rx: tokio::sync::oneshot::Receiver<()>,
+    accumulated_content: Arc<Mutex<String>>,
+    pair_programmer_id: String,
+    prompt: &str,
+    step_number: usize
+) {
+    // Wait until the channel receives the completion signal
+    let _ = rx.await;
+
+    // Unwrap the accumulated content after streaming is done
+    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+        .unwrap_or_else(|_| Mutex::new(String::new()))
+        .into_inner()
+        .unwrap();
+
+    // Print the accumulated content after streaming is completed
+    println!("Final accumulated content: {}", accumulated_content_final);
+
+    let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+    match  db_response {
+        Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
+        Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
+    }
+}
+
+async fn handle_stream_completion_execute(
+    rx: tokio::sync::oneshot::Receiver<()>,
+    accumulated_content: Arc<Mutex<String>>,
+    pair_programmer_id: String,
+    step_number: usize
+) {
+    // Wait until the channel receives the completion signal
+    let _ = rx.await;
+
+    // Unwrap the accumulated content after streaming is done
+    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+        .unwrap_or_else(|_| Mutex::new(String::new()))
+        .into_inner()
+        .unwrap();
+
+    // Print the accumulated content after streaming is completed
+    println!("Final accumulated content: {}", accumulated_content_final);
+
+    let db_response = DB_INSTANCE.update_step_execution(&pair_programmer_id.clone(), &step_number.to_string(), &accumulated_content_final);
+    match  db_response {
+        Ok(_) => {debug!("DB Update successful for executing pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
+        Err(err) => {error!("Error updating executing pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
+    }
 }
