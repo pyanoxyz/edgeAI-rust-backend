@@ -2508,6 +2508,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyano-server"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "anyhow",
+ "async-stream",
+ "async-trait",
+ "bytes",
+ "cc",
+ "chrono",
+ "dirs",
+ "dotenv",
+ "env_logger",
+ "faiss",
+ "fastembed",
+ "futures",
+ "futures-util",
+ "git2",
+ "lazy_static",
+ "libloading",
+ "log",
+ "once_cell",
+ "psutil",
+ "rand",
+ "regex",
+ "reqwest 0.12.7",
+ "rusqlite",
+ "rust-bert",
+ "rust_tokenizers",
+ "serde",
+ "serde_json",
+ "sqlite-vec",
+ "sysinfo",
+ "tch",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tree-sitter",
+ "url",
+ "uuid",
+ "zerocopy",
+]
+
+[[package]]
 name = "qoi"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2824,51 +2869,6 @@ dependencies = [
  "hashlink",
  "libsqlite3-sys",
  "smallvec",
-]
-
-[[package]]
-name = "rust-backend"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "anyhow",
- "async-stream",
- "async-trait",
- "bytes",
- "cc",
- "chrono",
- "dirs",
- "dotenv",
- "env_logger",
- "faiss",
- "fastembed",
- "futures",
- "futures-util",
- "git2",
- "lazy_static",
- "libloading",
- "log",
- "once_cell",
- "psutil",
- "rand",
- "regex",
- "reqwest 0.12.7",
- "rusqlite",
- "rust-bert",
- "rust_tokenizers",
- "serde",
- "serde_json",
- "sqlite-vec",
- "sysinfo",
- "tch",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tree-sitter",
- "url",
- "uuid",
- "zerocopy",
 ]
 
 [[package]]

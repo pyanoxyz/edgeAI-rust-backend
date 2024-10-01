@@ -144,6 +144,31 @@ impl DBConfig{
 
     }
 
+    pub fn step_chat_string(&self, pair_programmer_id: &str, step_number: &str) -> Result<String, Box<dyn std::error::Error>> {
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    
+        // Fetch the current chat from the step
+        let mut stmt = connection.prepare("SELECT chat FROM pair_programmer_steps WHERE id = ?1")?;
+        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+    
+        // Deserialize the chat history from the JSON string
+        let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+    
+        // Convert the StepChat into a formatted string with prompts and responses
+        let formatted_string = chat_history
+            .into_iter()
+            .map(|chat| {
+                format!("Prompt: {}\nResponse: {}\n", chat.prompt, chat.response)
+            })
+            .collect::<Vec<String>>()
+            .join("\n"); // Join the formatted strings with newlines
+    
+        // Return the whole formatted string
+        Ok(formatted_string)
+    }
+
     pub fn get_step_chat(&self, pair_programmer_id: &str, step_number: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         // Lock the mutex to access the connection
         let connection = self.pair_programmer_connection.lock().unwrap();

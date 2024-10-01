@@ -6,13 +6,21 @@ use uuid::Uuid;
 use crate::database::db_config::DB_INSTANCE;
 use log::{info, debug, error};
 use actix_web::FromRequest;
-
+use crate::summarization::summarize::summarize_text;
+use crate::embeddings::text_embeddings::generate_text_embedding;
+use crate::prompt_compression::compress::get_attention_scores;
 // Import this trait to use `from_request`
 use std::sync::{Arc, Mutex};    
 use futures_util::StreamExt; // Import this trait for accessing `.next()`
 use async_stream::stream;
-use crate::pair_programmer::pair_programmer_utils::{parse_steps, validate_steps, parse_step_number, format_steps, prompt_with_context, prompt_with_context_for_chat };
+use crate::pair_programmer::pair_programmer_utils::{rethink_prompt_with_context, parse_steps, validate_steps, parse_step_number, format_steps, prompt_with_context, prompt_with_context_for_chat };
 use serde_json::json;
+
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    error: String,
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateStepsRequest {
@@ -22,7 +30,17 @@ pub struct GenerateStepsRequest {
 
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SummarizeChatRequest {
+    pub pair_programmer_id: String,
+    pub step_number: String
+}
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RethinkRequest {
+    pub pair_programmer_id: String,
+    pub step_number: String
+}
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +62,9 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(pair_programmer_generate_steps)
     .service(get_steps)
     .service(execute_step)
-    .service(chat_step);
+    .service(chat_step)
+    .service(chat_summary)
+    .service(rethink_step);
 }
 
 
@@ -184,10 +204,6 @@ async fn get_steps(path: web::Path<String>) -> Result<HttpResponse, Error> {
 }
 
 
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    error: String,
-}
 
 
 #[post("/pair-programmer/steps/execute")]
@@ -235,7 +251,7 @@ pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
     let step = &steps[step_number];
 
     //TODO: Last step execution shall also be given in context and also the chat
-    let (all_steps, steps_executed_so_far, steps_executed_with_response) = format_steps(&steps, step_number);
+    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
 
     let function_call = step.get("tool")
         .and_then(|v| v.as_str())
@@ -334,9 +350,79 @@ pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
 }
 
 
+
+#[post("/pair-programmer/steps/chat_summary")]
+pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+    
+    let data: Result<web::Json<SummarizeChatRequest>, Error> = web::Json::<SummarizeChatRequest>::from_request(&req, &mut payload.into_inner()).await;
+    let valid_data = match data {
+        Ok(valid_data) => {
+            // Check if fields are empty and return early if any field is missing
+            if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
+                let error_response = ErrorResponse {
+                    error: "Missing required fields: pair_programmer_id or step_number".to_string(),
+                };
+                return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+            }
+
+            valid_data.into_inner() // Proceed if validation passes
+        }
+        Err(err) => {
+            // Handle invalid JSON error
+            let error_response = ErrorResponse {
+                error: format!("Invalid JSON payload: {}", err),
+            };
+            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
+        }
+    };
+    
+    let pair_programmer_id = valid_data.pair_programmer_id.clone();
+    let step_number = valid_data.step_number.clone();
+    let step_number = parse_step_number(&valid_data.step_number)?;
+    info!("step_number={}", step_number);
+
+    let step_chat = match DB_INSTANCE.step_chat_string(&pair_programmer_id, &step_number.to_string()){
+        Ok(chat) => chat,
+        Err(err) => {
+            let error_response = ErrorResponse{
+                error: format!("Failed to retrieve chat: {}", err),
+            };
+            return Ok(HttpResponse::InternalServerError().json(error_response));
+        }
+    };
+
+    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&step_chat).await;
+    let tokens = match result {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            let error_response = ErrorResponse {
+                            error: format!("Failed to summarize chat: {}", e),
+                        };
+                        return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
+        }
+    };
+
+    let embeddings_result = generate_text_embedding(&step_chat).await;
+    let embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(e) =>  {
+            let error_response = ErrorResponse {
+                            error: format!("Failed to summarize chat: {}", e),
+                        };
+                        return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
+        },
+    };
+
+    let compressed_prompt = tokens.join(" ");
+    debug!("Compressed Prompt {:?}", compressed_prompt);
+
+    let summary = summarize_text(&step_chat).await.unwrap();
+    Ok(HttpResponse::Ok().json(json!({ "summary": summary })))
+}
+
 #[post("/pair-programmer/steps/chat")]
 pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let data = web::Json::<ChatStepRequest>::from_request(&req, &mut payload.into_inner()).await;
+    let data: Result<web::Json<ChatStepRequest>, Error> = web::Json::<ChatStepRequest>::from_request(&req, &mut payload.into_inner()).await;
     let valid_data = match data {
         Ok(valid_data) => {
             // Check if fields are empty and return early if any field is missing
@@ -381,7 +467,7 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
     let step = &steps[true_step_number];
 
     //TODO: Last step execution shall also be given in context and also the chat
-    let (all_steps, steps_executed_so_far, steps_executed_with_response) = format_steps(&steps, step_number);
+    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
 
     // let function_call = step.get("tool")
     //     .and_then(|v| v.as_str())
@@ -389,7 +475,7 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
     //         actix_web::error::ErrorBadRequest(format!("Invalid step: 'tool' field is missing or not a string {}", step_number))
     //     })
     //     .unwrap();
-    
+
     //here we also use step number because the indexing in the database starts with 1 not 0.
     let step_chats = DB_INSTANCE.get_step_chat(&pair_programmer_id, &step_number.to_string());
     info!("Chat history {:?}", step_chats);
@@ -477,6 +563,150 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
                 Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
                 Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
             }
+
+      });
+
+    Ok(response)
+
+}
+
+#[post("/pair-programmer/steps/rethink")]
+pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+    let data: Result<web::Json<RethinkRequest>, Error> = web::Json::<RethinkRequest>::from_request(&req, &mut payload.into_inner()).await;
+    let valid_data = match data {
+        Ok(valid_data) => {
+            // Check if fields are empty and return early if any field is missing
+            if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
+                let error_response = ErrorResponse {
+                    error: "Missing required fields: pair_programmer_id or step_number".to_string(),
+                };
+                return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+            }
+
+            valid_data.into_inner() // Proceed if validation passes
+        }
+        Err(err) => {
+            // Handle invalid JSON error
+            let error_response = ErrorResponse {
+                error: format!("Invalid JSON payload: {}", err),
+            };
+            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
+        }
+    };
+
+    let pair_programmer_id = valid_data.pair_programmer_id.clone();
+    // Parse the step_number
+    let step_number = parse_step_number(&valid_data.step_number)?;
+    info!("step_number={}", step_number);
+    let true_step_number = step_number -1;
+
+    // Fetch the steps from the database
+    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
+    // Check if the steps can be executed
+    match validate_steps(step_number, &steps){
+        Ok(_) => {},
+        Err(error) => {
+            return Ok(HttpResponse::BadRequest().json(json!({
+                "error": format!("{}", error),
+            })));        
+        }
+    }
+    let step = &steps[true_step_number];
+    let step_chat = match DB_INSTANCE.step_chat_string(&pair_programmer_id, &step_number.to_string()){
+        Ok(chat) => chat,
+        Err(err) => {
+            let error_response = ErrorResponse{
+                error: format!("Failed to retrieve chat: {}", err),
+            };
+            return Ok(HttpResponse::InternalServerError().json(error_response));
+        }
+    };
+
+    
+    let task_heading = step.get("heading")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string {}", true_step_number))
+        })
+        .unwrap();
+    let (all_steps, steps_executed_so_far, _) = format_steps(&steps, step_number);
+
+    let task_with_context=   rethink_prompt_with_context(&all_steps, &steps_executed_so_far, task_heading, &step_chat);
+    // Match the function call and return the appropriate agent
+    let agent = AgentEnum::new("rethinker", task_heading.to_string(), task_with_context)?;
+
+    // This variable will accumulate the entire content of the stream
+    let accumulated_content = Arc::new(Mutex::new(String::new()));
+    let accumulated_content_clone = Arc::clone(&accumulated_content);
+
+    
+    let stream_result = agent.execute().await;
+    let mut stream = match stream_result {
+          Ok(s) => s,
+          Err(e) => {
+              return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                  "error": format!("Local LLM response error: {}", e)
+              })));
+          }
+      };
+  
+      // Create a channel to wait for the stream completion, the receiver will wait till the end of the stream
+      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+      // Stream chunks to the client in real time and accumulate
+      let response_stream = stream! {
+          while let Some(chunk_result) = stream.next().await {
+              match chunk_result {
+                  Ok(chunk) => {
+                      if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+                          // Accumulate the content in memory
+                          {
+                              let mut accumulated = accumulated_content_clone.lock().unwrap();
+                              accumulated.push_str(chunk_str);
+                          }
+  
+                          // Yield each chunk to the stream
+                          yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
+                      }
+                  }
+                  Err(e) => {
+                      yield Err(actix_web::error::ErrorInternalServerError(format!(
+                          "Error while streaming: {}",
+                          e
+                      )));
+                  }
+              }
+          }
+  
+          // Notify that streaming is complete
+          let _ = tx.send(());
+      };
+  
+      // Return the response as a streaming body
+      let response = HttpResponse::Ok()
+          .content_type("application/json")
+          .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
+          .streaming(response_stream);
+  
+      // Wait for the streaming to complete before unwrapping the accumulated content
+      tokio::spawn(async move {
+          // Wait until the channel receives the completion signal
+          let _ = rx.await;
+  
+          // Unwrap the accumulated content after streaming is done
+          let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+              .unwrap_or_else(|_| Mutex::new(String::new()))
+              .into_inner()
+              .unwrap();
+  
+          // Print the accumulated content after streaming is completed
+          println!("Final accumulated content: {}", accumulated_content_final);
+          //here step number should be step_number not tru_step_number because the steps are being stored rom an index 1 rather then zero.
+        //   let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+        //     match  db_response {
+        //         Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
+        //         Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
+        //     }
 
       });
 

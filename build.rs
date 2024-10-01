@@ -17,26 +17,28 @@ fn main() {
             println!("cargo:rustc-link-arg=-ltorch");
         }
         "macos" => {
-            // Path to the LibTorch binaries on macOS (custom location)
+            //Path to the LibTorch binaries on macOS (custom location)
+            
             let libtorch_path = PathBuf::from(env::var("HOME").unwrap())
                 .join(".pyano")
                 .join("binaries");
 
-            // Ensure the dynamic linker knows where to find the LibTorch libraries
+            //Ensure the dynamic linker knows where to find the LibTorch libraries
             println!(
                 "cargo:rustc-link-arg=-Wl,-rpath,{}",
                 libtorch_path.display()
             );
 
-            // Set DYLD_LIBRARY_PATH without overwriting if it already exists
+            //Set DYLD_LIBRARY_PATH without overwriting if it already exists
             let current_dyld_path = env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
             let new_dyld_path = format!("{}:{}", libtorch_path.display(), current_dyld_path);
             println!("cargo:rustc-env=DYLD_LIBRARY_PATH={}", new_dyld_path);
 
-            // Avoid adding duplicate `-ltorch` link argument
+            //Avoid adding duplicate `-ltorch` link argument
             println!("cargo:rustc-link-arg=-ltorch");
+            println!("cargo:rustc-env=TORCH_USE_MPS=1");
 
-            // Link macOS system frameworks for CoreML
+
             // println!("cargo:rustc-link-arg=-framework");
             // println!("cargo:rustc-link-arg=CoreML");
 
@@ -54,8 +56,8 @@ fn main() {
             // // Link libsystem (handles some platform-specific functions)
             // println!("cargo:rustc-link-lib=system");
 
-            // Avoid duplicate RPATH entries
-            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libtorch_path.display());
+            // // Avoid duplicate RPATH entries
+            // println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libtorch_path.display());
         }
         _ => {}
     }

@@ -341,3 +341,24 @@ pub fn prompt_with_context_for_chat(
         recent_discussion = recent_discussion
     )
 }
+
+pub fn rethink_prompt_with_context(
+    all_steps: &str, 
+    steps_executed: &str, 
+    current_step: &str, 
+    recent_discussion: &str
+) -> String {
+    format!(
+        r#"
+        all_steps: {all_steps}
+        steps_executed_so_far: {steps_executed}
+        current_step: {current_step}
+        recent_discussion: {recent_discussion}
+        Please suggest changes to the current step based on the recent discussion.
+        "#,
+        all_steps = all_steps,
+        steps_executed = steps_executed,
+        current_step = current_step,
+        recent_discussion = recent_discussion
+    )
+}
