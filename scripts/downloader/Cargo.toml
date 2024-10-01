@@ -1,0 +1,12 @@
+[package]
+name = "downloader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12.8", features = ["json", "blocking"] }
+indicatif = "0.17"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures = "0.3"
+console = "0.15"
