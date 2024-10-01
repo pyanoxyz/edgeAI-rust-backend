@@ -118,6 +118,57 @@ impl DBConfig{
     }
     
 
+    pub fn update_step_chat(&self, pair_programmer_id: &str, step_number: &str, prompt: &str, response: &str) ->Result<(), rusqlite::Error>  {
+            
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
 
+        // Fetch the current chat from the step
+        let mut stmt = connection.prepare("SELECT chat FROM pair_programmer_steps WHERE id = ?1")?;
+        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+
+        let mut chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+
+        // Append the new chat message
+        chat_history.push(StepChat{prompt: prompt.to_string(), response: response.to_string()});
+
+        // Serialize the updated chat array
+        let updated_chat_json = serde_json::to_string(&chat_history).unwrap();
+
+        // Update the step with the new response and chat history
+        let sql = "UPDATE pair_programmer_steps SET chat = ?1 WHERE id = ?2";
+        connection.execute(sql, params![updated_chat_json, step_id])?;
+
+        Ok(())
+
+    }
+
+    pub fn get_step_chat(&self, pair_programmer_id: &str, step_number: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock().unwrap();
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    
+        // Fetch the current chat from the step
+        let mut stmt = connection.prepare("SELECT chat FROM pair_programmer_steps WHERE id = ?1")?;
+        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+    
+        // Deserialize the chat history from the JSON string
+        let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+    
+        // Create a vector of JSON values where each element contains the prompt and response
+        let chat_vector: Vec<Value> = chat_history
+            .into_iter()
+            .map(|chat| {
+                json!({
+                    "prompt": chat.prompt,
+                    "response": chat.response
+                })
+            })
+            .collect();
+    
+        // Return the vector of chat history
+        Ok(chat_vector)
+    }
 
 }

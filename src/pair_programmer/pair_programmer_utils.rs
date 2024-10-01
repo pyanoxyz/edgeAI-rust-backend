@@ -5,6 +5,56 @@ use crate::pair_programmer::pair_programmer_types::Step;
 use std::cmp::max;
 use actix_web:: Error;
 
+/// Parses a string input and extracts steps with their associated metadata, including step number, heading, tool, and action.
+///
+/// This function uses regular expressions to parse each line of the input string, matching the following patterns:
+/// 1. **Step**: Captures the step number and heading in the format `Step N: Description`.
+/// 2. **Tool**: Captures the tool name, allowing for spaces and hyphens, in the format `Tool: tool-name`.
+/// 3. **Action**: Captures an action that contains a function and parameters in the format 
+///    `Action: <function=function_name>{{parameters}}`
+///
+/// Each step is represented by a `Step` struct that holds the following:
+/// - `step_number`: The step's number.
+/// - `heading`: A string representing the heading or description of the step.
+/// - `tool`: The tool name associated with the step, if provided.
+/// - `action`: The action to be executed, containing a function and its parameters, if provided.
+///
+/// # Arguments
+///
+/// * `input` - A string slice (`&str`) containing the step definitions. The steps should be formatted in a predefined structure with step number, tool, and action.
+///
+/// # Returns
+///
+/// * `Vec<Step>` - A vector of `Step` structs, each representing a parsed step with its metadata.
+///
+/// # Example
+///
+/// ```rust
+/// let input = r#"
+/// Step 1: Initialize the project
+/// Tool: build-tool
+/// Action: <function=initialize>{{"param": "value"}}
+///
+/// Step 2: Set up environment
+/// Tool: env-tool
+/// Action: <function=setup>{{"config": "env"}}
+/// "#;
+///
+/// let steps = parse_steps(input);
+/// for step in steps {
+///     println!("Step {}: {}", step.step_number, step.heading);
+///     println!("Tool: {}", step.tool);
+///     println!("Action: {}", step.action);
+/// }
+/// ```
+///
+/// This example demonstrates how the function processes the input and extracts the steps, tools, and actions. 
+/// The output will be a list of `Step` structs, with each step containing its parsed attributes.
+///
+/// # Note
+/// - If a step does not contain a tool or an action, the corresponding fields will remain empty.
+/// - The last step is automatically added when the end of the input is reached.
+
 pub fn parse_steps(input: &str) -> Vec<Step> {
     // Regex for matching the step number and description
     let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap();
@@ -67,8 +117,57 @@ pub fn parse_step_number(step_number_str: &str) -> Result<usize, Error> {
         .map_err(|_| actix_web::error::ErrorBadRequest("Invalid step number: unable to convert to a valid number"))
 }
 
-// Helper function to validate whether the steps can be executed
+/// Validates whether a specified step can be executed in a sequence of steps.
+///
+/// This function performs several checks to ensure that the provided step can be executed:
+/// 1. Ensures the step number is within the valid range of steps.
+/// 2. Ensures that all previous steps have been executed before the specified step can be executed.
+/// 3. Ensures the specified step has not already been executed.
+///
+/// # Arguments
+///
+/// * `step_number` - The 1-based index of the step to validate.
+/// * `steps` - A vector of `serde_json::Value` representing the steps. Each step must be a JSON object
+///             that contains an `"executed"` field, which indicates whether the step has already been executed.
+///
+/// # Returns
+///
+/// * `Ok(())` - If the specified step can be executed.
+/// * `Err(Error)` - If validation fails due to one of the following reasons:
+///     - The step number is out of bounds.
+///     - A previous step has not been executed.
+///     - The current step has already been executed.
+///     - Invalid step format (the step data is not a JSON object).
+///
+/// # Errors
+///
+/// * `ErrorBadRequest` - Returned if:
+///     - The step number is out of bounds.
+///     - A previous step has not been executed.
+///     - The current step has already been executed.
+/// * `ErrorInternalServerError` - Returned if the step data is in an invalid format.
+///
+/// # Example
+///
+/// ```
+/// let steps = vec![
+///     json!({"executed": true}),
+///     json!({"executed": false}),
+///     json!({"executed": false}),
+/// ];
+///
+/// let step_number = 2;
+/// match validate_steps(step_number, &steps) {
+///     Ok(()) => println!("Step can be executed."),
+///     Err(e) => println!("Error: {}", e),
+/// }
+/// ```
+///
+/// In this example, the function will allow the second step to be executed only if the first step has already been executed
+/// and the second step itself has not been executed yet.
+
 pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Result<(), Error> {
+
     if step_number > steps.len() {
         return Err(actix_web::error::ErrorBadRequest(
             format!("Step number {} is out of bounds, there are only {} steps", step_number, steps.len()),
@@ -112,6 +211,51 @@ pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Res
     }
     Ok(())
 }
+
+/// Formats the steps in a structured way, generating three different outputs:
+/// 1. A formatted list of all steps with their headings.
+/// 2. A formatted list of steps that have been executed so far.
+/// 3. A formatted list of the most recent executed steps (up to the last 3 before the current step),
+///    along with their associated responses.
+///
+/// # Arguments
+///
+/// * `steps` - A slice of `serde_json::Value` representing the steps. Each step is expected to contain:
+///   - `"heading"`: A string representing the heading of the step.
+///   - `"executed"`: A boolean indicating whether the step has been executed.
+///   - `"response"`: A string representing the response associated with the step, if available.
+/// * `step_number` - The current step number, used to filter and limit the steps executed with responses.
+///
+/// # Returns
+///
+/// A tuple containing three formatted strings:
+/// * `(String, String, String)`:
+///   - The first string contains all steps with their headings in the format `Step: N. Heading`.
+///   - The second string contains the steps that have been executed so far, filtered by the `"executed"` field.
+///   - The third string contains the last 3 executed steps (limited to steps before the current step number),
+///     including their responses, in the format:
+///     ```
+///     Step: Heading
+///     response: Response
+///     ```
+///
+/// # Example
+///
+/// ```rust
+/// let steps = vec![
+///     json!({"heading": "Initialize project", "executed": true, "response": "Success"}),
+///     json!({"heading": "Set up environment", "executed": false}),
+///     json!({"heading": "Run tests", "executed": true, "response": "All tests passed"}),
+/// ];
+///
+/// let (all_steps, steps_executed_so_far, steps_executed_with_response) = format_steps(&steps, 3);
+///
+/// println!("All Steps:\n{}", all_steps);
+/// println!("Executed Steps So Far:\n{}", steps_executed_so_far);
+/// println!("Executed Steps with Responses:\n{}", steps_executed_with_response);
+/// ```
+///
+/// This example shows how to use the function to get the formatted steps and how the output is structured.
 
 pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String, String) {
     // Format all steps
@@ -171,6 +315,29 @@ pub fn prompt_with_context(
         steps_executed = steps_executed,
         current_step = current_step,
         additional_context_from_codebase = additional_context_from_codebase,
+        recent_discussion = recent_discussion
+    )
+}
+
+pub fn prompt_with_context_for_chat(
+    all_steps: &str, 
+    steps_executed: &str, 
+    current_step: &str, 
+    user_prompt: &str, 
+    recent_discussion: &str
+) -> String {
+    format!(
+        r#"
+        all_steps: {all_steps}
+        steps_executed_so_far: {steps_executed}
+        current_step: {current_step}
+        recent_discussion: {recent_discussion}
+        Please respond to user query {user_prompt} based on the context.
+        "#,
+        all_steps = all_steps,
+        steps_executed = steps_executed,
+        current_step = current_step,
+        user_prompt = user_prompt,
         recent_discussion = recent_discussion
     )
 }

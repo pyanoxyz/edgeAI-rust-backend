@@ -37,22 +37,22 @@ fn main() {
             println!("cargo:rustc-link-arg=-ltorch");
 
             // Link macOS system frameworks for CoreML
-            println!("cargo:rustc-link-arg=-framework");
-            println!("cargo:rustc-link-arg=CoreML");
+            // println!("cargo:rustc-link-arg=-framework");
+            // println!("cargo:rustc-link-arg=CoreML");
 
-            println!("cargo:rustc-link-arg=-framework");
-            println!("cargo:rustc-link-arg=Foundation");
+            // println!("cargo:rustc-link-arg=-framework");
+            // println!("cargo:rustc-link-arg=Foundation");
 
-            // Link CoreFoundation for system-specific symbols
-            println!("cargo:rustc-link-arg=-framework");
-            println!("cargo:rustc-link-arg=CoreFoundation");
+            // // Link CoreFoundation for system-specific symbols
+            // println!("cargo:rustc-link-arg=-framework");
+            // println!("cargo:rustc-link-arg=CoreFoundation");
 
-            // Link QuartzCore for rendering support
-            println!("cargo:rustc-link-arg=-framework");
-            println!("cargo:rustc-link-arg=QuartzCore");
+            // // Link QuartzCore for rendering support
+            // println!("cargo:rustc-link-arg=-framework");
+            // println!("cargo:rustc-link-arg=QuartzCore");
 
-            // Link libsystem (handles some platform-specific functions)
-            println!("cargo:rustc-link-lib=system");
+            // // Link libsystem (handles some platform-specific functions)
+            // println!("cargo:rustc-link-lib=system");
 
             // Avoid duplicate RPATH entries
             println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libtorch_path.display());

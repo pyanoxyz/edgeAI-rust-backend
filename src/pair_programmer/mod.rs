@@ -8,3 +8,4 @@ pub mod agent_native_llm;
 pub mod agent_rethinker;
 pub mod agent_enum;
 pub mod pair_programmer_utils;
+pub mod agent_chat;

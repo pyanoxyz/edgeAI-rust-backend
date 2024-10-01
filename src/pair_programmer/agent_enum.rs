@@ -3,9 +3,10 @@ use crate::pair_programmer::{agent_planner::PlannerAgent,
     agent_native_llm::NativeLLMAgent,
     agent_system_code::SystemCodeAgent,
     agent_rethinker::RethinkerAgent,
+    agent_chat::ChatAgent,
     agent::{Agent, AccumulatedStream}};
 use async_trait::async_trait;
-use actix_web::{HttpResponse, Error as ActixError};
+use actix_web::Error as ActixError;
 
 pub enum AgentEnum {
     GenerateCode(Box<dyn Agent>),
@@ -13,6 +14,7 @@ pub enum AgentEnum {
     Planner(Box<dyn Agent>),
     Rethinker(Box<dyn Agent>),
     SystemCode(Box<dyn Agent>),
+    Chat(Box<dyn Agent>)
 }
 
 
@@ -24,6 +26,7 @@ impl AgentEnum {
             "llm" => Ok(AgentEnum::NativeLLM(Box::new(NativeLLMAgent::new(user_prompt, prompt_with_context)))),
             "planner" => Ok(AgentEnum::Planner(Box::new(PlannerAgent::new(user_prompt, prompt_with_context)))),
             "rethinker" => Ok(AgentEnum::Rethinker(Box::new(RethinkerAgent::new(user_prompt, prompt_with_context)))),
+            "chat" => Ok(AgentEnum::Chat(Box::new(ChatAgent::new(user_prompt, prompt_with_context)))),
             _ => Err(actix_web::error::ErrorInternalServerError(format!("Unknown agent type: {}", agent_type)).into()),
         }
     }
@@ -38,6 +41,8 @@ impl Agent for AgentEnum {
             AgentEnum::Planner(agent) => agent.get_name(),
             AgentEnum::Rethinker(agent) => agent.get_name(),
             AgentEnum::SystemCode(agent) => agent.get_name(),
+            AgentEnum::Chat(agent) => agent.get_name(),
+
         }
     }
 
@@ -48,6 +53,8 @@ impl Agent for AgentEnum {
             AgentEnum::Planner(agent) => agent.get_user_prompt(),
             AgentEnum::Rethinker(agent) => agent.get_user_prompt(),
             AgentEnum::SystemCode(agent) => agent.get_user_prompt(),
+            AgentEnum::Chat(agent) => agent.get_user_prompt(),
+            
         }
     }
 
@@ -58,6 +65,8 @@ impl Agent for AgentEnum {
             AgentEnum::Planner(agent) => agent.get_system_prompt(),
             AgentEnum::Rethinker(agent) => agent.get_system_prompt(),
             AgentEnum::SystemCode(agent) => agent.get_system_prompt(),
+            AgentEnum::Chat(agent) => agent.get_system_prompt(),
+
         }
     }
 
@@ -68,6 +77,8 @@ impl Agent for AgentEnum {
             AgentEnum::Planner(agent) => agent.get_prompt_with_context(),
             AgentEnum::Rethinker(agent) => agent.get_prompt_with_context(),
             AgentEnum::SystemCode(agent) => agent.get_prompt_with_context(),
+            AgentEnum::Chat(agent) => agent.get_prompt_with_context(),
+
         }
     }
 
@@ -78,6 +89,8 @@ impl Agent for AgentEnum {
             AgentEnum::Planner(agent) => agent.execute().await,
             AgentEnum::Rethinker(agent) => agent.execute().await,
             AgentEnum::SystemCode(agent) => agent.execute().await,
+            AgentEnum::Chat(agent) => agent.execute().await,
+
         }
     }
 }
