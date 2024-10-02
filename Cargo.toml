@@ -9,9 +9,6 @@ build = "build.rs"  # Ensure build.rs is called during build
 cc="1.1.23"
 dirs = "5.0.1"
 
-[features]
-download-libtorch = ["tch/download-libtorch"]
-
 [dependencies]
 actix-web = "4"         # The main web framework
 tokio = { version = "1", features = ["full"] }

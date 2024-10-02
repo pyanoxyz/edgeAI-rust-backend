@@ -57,11 +57,11 @@ select_model() {
         # MODEL_NAME="Qwen2.5-14B-Instruct-IQ3_XS.gguf"
         # MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-IQ3_XS.gguf"
         CTX=32000
-        BATCH_SIZE=2192 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
+        BATCH_SIZE=4096 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
                         #is 8 tokens long at the batch size is 4, then it'll send two chunks of 4. It may be more efficient to process 
                         # in larger chunks. For some models or approaches, sometimes that is the case. It will depend on how llama.cpp handles it.
                         #larger BATCH size is speedup processing but more load on Memory        
-        GPU_LAYERS_OFFLOADED=12 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, 
+        GPU_LAYERS_OFFLOADED=-1 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, 
                         #you can use -1 to move all to GPU.
     fi
     MODEL_PATH="$MODEL_DIR/$MODEL_NAME"

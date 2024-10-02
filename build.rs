@@ -18,7 +18,10 @@ fn main() {
 
 
         let libtorch_path = home_dir.join(".pyano").join("binaries");
-        let libtorch_path_str ="/opt/homebrew/Cellar/pytorch/2.4.1/";
+        // let libtorch_path_str ="/opt/homebrew/Cellar/pytorch/2.4.1/";
+
+        let libtorch_path_str = libtorch_path.to_str().expect("Invalid libtorch path");
+
 
         // Set the environment variable for download before any checks
         env::set_var("TORCH_HOME", libtorch_path_str);
