@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use dirs::home_dir;
 
 fn main() {
     let os = env::var("CARGO_CFG_TARGET_OS").expect("Unable to get TARGET_OS");
@@ -17,47 +17,28 @@ fn main() {
             println!("cargo:rustc-link-arg=-ltorch");
         }
         "macos" => {
-            //Path to the LibTorch binaries on macOS (custom location)
-            
-            let libtorch_path = PathBuf::from(env::var("HOME").unwrap())
-                .join(".pyano")
-                .join("binaries");
+            // Path to the LibTorch binaries on macOS (custom location)
+            if let Some(home_dir) = home_dir() {
+                let libtorch_path = home_dir.join(".pyano").join("binaries");
+                let libtorch_path_str = libtorch_path.to_str().expect("Invalid libtorch path");
 
-            //Ensure the dynamic linker knows where to find the LibTorch libraries
-            println!(
-                "cargo:rustc-link-arg=-Wl,-rpath,{}",
-                libtorch_path.display()
-            );
+                // Ensure the dynamic linker knows where to find the LibTorch libraries
+                println!(
+                    "cargo:rustc-link-arg=-Wl,-rpath,{}",
+                    libtorch_path.display()
+                );
 
-            //Set DYLD_LIBRARY_PATH without overwriting if it already exists
-            let current_dyld_path = env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
-            let new_dyld_path = format!("{}:{}", libtorch_path.display(), current_dyld_path);
-            println!("cargo:rustc-env=DYLD_LIBRARY_PATH={}", new_dyld_path);
+                // Set DYLD_LIBRARY_PATH without overwriting if it already exists
+                let current_dyld_path = env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
+                let new_dyld_path = format!("{}:{}", libtorch_path.display(), current_dyld_path);
+                println!("cargo:rustc-env=DYLD_LIBRARY_PATH={}", new_dyld_path);
 
-            //Avoid adding duplicate `-ltorch` link argument
-            println!("cargo:rustc-link-arg=-ltorch");
-            println!("cargo:rustc-env=TORCH_USE_MPS=1");
-
-
-            // println!("cargo:rustc-link-arg=-framework");
-            // println!("cargo:rustc-link-arg=CoreML");
-
-            // println!("cargo:rustc-link-arg=-framework");
-            // println!("cargo:rustc-link-arg=Foundation");
-
-            // // Link CoreFoundation for system-specific symbols
-            // println!("cargo:rustc-link-arg=-framework");
-            // println!("cargo:rustc-link-arg=CoreFoundation");
-
-            // // Link QuartzCore for rendering support
-            // println!("cargo:rustc-link-arg=-framework");
-            // println!("cargo:rustc-link-arg=QuartzCore");
-
-            // // Link libsystem (handles some platform-specific functions)
-            // println!("cargo:rustc-link-lib=system");
-
-            // // Avoid duplicate RPATH entries
-            // println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libtorch_path.display());
+                // Avoid adding duplicate `-ltorch` link argument
+                println!("cargo:rustc-link-arg=-ltorch");
+                println!("cargo:rustc-env=TORCH_USE_MPS=1");
+            } else {
+                panic!("Home directory not found");
+            }
         }
         _ => {}
     }

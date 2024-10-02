@@ -7,6 +7,7 @@ build = "build.rs"  #
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
 cc="*"
+dirs = "5.0.1"
 
 [dependencies]
 actix-web = "4"         # The main web framework
@@ -29,7 +30,6 @@ chrono = "0.4"
 sysinfo = "0.28"
 sqlite-vec = "0.1.2"
 rusqlite = {version="0.31.0", features=["bundled"]}
-dirs = "5.0.1"
 zerocopy = "0.7.35"
 rust-bert = "0.22.0"
 tch = { version = "0.14.0", features = ["download-libtorch"] }
@@ -47,3 +47,4 @@ rand = "0.8.5"
 async-trait = "0.1.83"
 thiserror = "1.0.64"
 async-stream = "0.3.5"
+dirs = "5.0.1"
