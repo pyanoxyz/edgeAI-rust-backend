@@ -7,14 +7,14 @@ fn main() {
     // Get the home directory
     if let Some(home_dir) = home_dir() {
 
-        println!("cargo:rustc-link-search=native=/usr/lib");
+        // println!("cargo:rustc-link-search=native=/usr/lib");
         println!("cargo:rustc-link-lib=c++");
-        println!("cargo:rustc-link-arg=-stdlib=libc++");
+        // println!("cargo:rustc-link-arg=-stdlib=libc++");
 
-        println!("cargo:rustc-link-arg=-framework");
-        println!("cargo:rustc-link-arg=CoreML");
-        println!("cargo:rustc-link-arg=-framework");
-        println!("cargo:rustc-link-arg=Foundation");
+        // println!("cargo:rustc-link-arg=-framework");
+        // println!("cargo:rustc-link-arg=CoreML");
+        // println!("cargo:rustc-link-arg=-framework");
+        // println!("cargo:rustc-link-arg=Foundation");
 
 
         let libtorch_path = home_dir.join(".pyano").join("binaries");
@@ -23,14 +23,14 @@ fn main() {
         let libtorch_path_str = libtorch_path.to_str().expect("Invalid libtorch path");
 
 
-        // Set the environment variable for download before any checks
-        env::set_var("TORCH_HOME", libtorch_path_str);
-        env::set_var("LIBTORCH", libtorch_path_str);
-        env::set_var("MACOSX_DEPLOYMENT_TARGET", "14.0");
+        // // Set the environment variable for download before any checks
+        // env::set_var("TORCH_HOME", libtorch_path_str);
+        // env::set_var("LIBTORCH", libtorch_path_str);
+        env::set_var("MACOSX_DEPLOYMENT_TARGET", "11.0");
 
-    // Add these lines:
-    println!("cargo:rustc-link-lib=framework=CoreML");
-    println!("cargo:rustc-link-lib=framework=Foundation");
+    // // Add these lines:
+    // println!("cargo:rustc-link-lib=framework=CoreML");
+    // println!("cargo:rustc-link-lib=framework=Foundation");
         // Ensure that LibTorch is downloaded by tch via build.rs
         println!("cargo:rerun-if-changed=build.rs");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
