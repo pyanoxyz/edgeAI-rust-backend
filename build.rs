@@ -1,45 +1,47 @@
 use std::env;
+use std::fs;
+use std::path::Path;
 use dirs::home_dir;
 
 fn main() {
-    let os = env::var("CARGO_CFG_TARGET_OS").expect("Unable to get TARGET_OS");
+    // Get the home directory
+    if let Some(home_dir) = home_dir() {
 
-    match os.as_str() {
-        "linux" | "windows" => {
-            if let Some(lib_path) = env::var_os("DEP_TCH_LIBTORCH_LIB") {
-                println!(
-                    "cargo:rustc-link-arg=-Wl,-rpath={}",
-                    lib_path.to_string_lossy()
-                );
-            }
-            println!("cargo:rustc-link-arg=-Wl,--no-as-needed");
-            println!("cargo:rustc-link-arg=-Wl,--copy-dt-needed-entries");
-            println!("cargo:rustc-link-arg=-ltorch");
+        println!("cargo:rustc-link-search=native=/usr/lib");
+        println!("cargo:rustc-link-lib=c++");
+        println!("cargo:rustc-link-arg=-stdlib=libc++");
+
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=CoreML");
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=Foundation");
+
+
+        let libtorch_path = home_dir.join(".pyano").join("binaries");
+        let libtorch_path_str ="/opt/homebrew/Cellar/pytorch/2.4.1/";
+
+        // Set the environment variable for download before any checks
+        env::set_var("TORCH_HOME", libtorch_path_str);
+        env::set_var("LIBTORCH", libtorch_path_str);
+        env::set_var("MACOSX_DEPLOYMENT_TARGET", "14.0");
+
+    // Add these lines:
+    println!("cargo:rustc-link-lib=framework=CoreML");
+    println!("cargo:rustc-link-lib=framework=Foundation");
+        // Ensure that LibTorch is downloaded by tch via build.rs
+        println!("cargo:rerun-if-changed=build.rs");
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rustc-link-search=native=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+        // Check if LibTorch is already downloaded
+        if !Path::new(&libtorch_path).exists() {
+            // Create directories if they don't exist
+            fs::create_dir_all(&libtorch_path).expect("Failed to create directories for libtorch");
         }
-        "macos" => {
-            // Path to the LibTorch binaries on macOS (custom location)
-            if let Some(home_dir) = home_dir() {
-                let libtorch_path = home_dir.join(".pyano").join("binaries");
-                let libtorch_path_str = libtorch_path.to_str().expect("Invalid libtorch path");
 
-                // Ensure the dynamic linker knows where to find the LibTorch libraries
-                println!(
-                    "cargo:rustc-link-arg=-Wl,-rpath,{}",
-                    libtorch_path.display()
-                );
+        // Set RPATH for linking at runtime
+        println!("cargo:rustc-link-search=native={}/lib", libtorch_path_str);
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}/lib", libtorch_path_str);
 
-                // Set DYLD_LIBRARY_PATH without overwriting if it already exists
-                let current_dyld_path = env::var("DYLD_LIBRARY_PATH").unwrap_or_default();
-                let new_dyld_path = format!("{}:{}", libtorch_path.display(), current_dyld_path);
-                println!("cargo:rustc-env=DYLD_LIBRARY_PATH={}", new_dyld_path);
-
-                // Avoid adding duplicate `-ltorch` link argument
-                println!("cargo:rustc-link-arg=-ltorch");
-                println!("cargo:rustc-env=TORCH_USE_MPS=1");
-            } else {
-                panic!("Home directory not found");
-            }
-        }
-        _ => {}
+        // Optional: add the logic to download manually if required
     }
 }

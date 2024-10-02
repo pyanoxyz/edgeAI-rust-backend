@@ -20,6 +20,30 @@ mod parser;
 mod rag;
 mod pair_programmer;
 mod summarization;
+// fn set_libtorch_path() {
+//     // Determine the path where LibTorch binaries are stored
+//     let home_dir = env::var("HOME").expect("Could not determine home directory");
+//     let libtorch_path = format!("{}/.pyano/torch", home_dir);
+
+//     // Get the current DYLD_LIBRARY_PATH (if any) and append the new path
+//     let current_dyld_library_path = env::var("DYLD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
+    
+//     // Set the DYLD_LIBRARY_PATH to include the LibTorch binaries
+//     let new_dyld_library_path = if current_dyld_library_path.is_empty() {
+//         libtorch_path.clone()
+//     } else {
+//         format!("{}:{}", libtorch_path, current_dyld_library_path)
+//     };
+
+//     // Clone the value before moving it to env::set_var
+//     env::set_var("DYLD_LIBRARY_PATH", new_dyld_library_path.clone());
+    
+//     // Now you can safely print the variable
+//     println!("DYLD_LIBRARY_PATH set to: {}", new_dyld_library_path);
+// }
+
+
+
 #[get("/")]
 async fn hello() -> impl Responder {
     info!("Request received");
@@ -92,6 +116,7 @@ async fn run_llama_server() {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
+
     // Access the environment variables
     let llm_server_url = env::var("LOCAL_URL").expect("LOCAL_URL not found");
     let temperature = env::var("TEMPERATURE").expect("TEMPERATURE not found");
