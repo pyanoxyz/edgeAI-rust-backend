@@ -1,6 +1,5 @@
-
-use actix_web::{HttpRequest, HttpResponse, Error};
-use crate::{request_type::RequestType, utils::local_llm_response, utils::remote_llm_response};
+use actix_web::{ HttpRequest, HttpResponse, Error };
+use crate::{ request_type::RequestType, utils::local_llm_response, utils::remote_llm_response };
 use serde_json::json;
 use crate::session_manager::check_session;
 use log::debug;
@@ -25,20 +24,23 @@ pub async fn handle_request(
     user_prompt: &str,
     session_id: Option<String>,
     req: Option<HttpRequest>,
-    chat_request_type: RequestType,
+    chat_request_type: RequestType
 ) -> Result<HttpResponse, Error> {
     // Check session and extract user ID from the request
     let session_id = match check_session(session_id) {
         Ok(id) => id,
         Err(e) => {
-            return Err(actix_web::error::ErrorInternalServerError(json!({
+            return Err(
+                actix_web::error::ErrorInternalServerError(
+                    json!({
                 "error": e.to_string()
-            })));
+            })
+                )
+            );
         }
     };
 
-    let full_user_prompt = prompt
-        .user_prompt_template
+    let full_user_prompt = prompt.user_prompt_template
         .replace("{context}", "")
         .replace("{user_prompt}", user_prompt);
 
@@ -46,9 +48,13 @@ pub async fn handle_request(
     let req = match req {
         Some(req) => req,
         None => {
-            return Err(actix_web::error::ErrorBadRequest(json!({
+            return Err(
+                actix_web::error::ErrorBadRequest(
+                    json!({
                 "error": "Request is required but not provided"
-            })));
+            })
+                )
+            );
         }
     };
 
@@ -62,13 +68,13 @@ pub async fn handle_request(
             &full_user_prompt,
             &session_id,
             &user.user_id,
-            chat_request_type,
-        )
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(json!({
+            chat_request_type
+        ).await.map_err(|e| {
+            actix_web::error::ErrorInternalServerError(
+                json!({
                 "error": format!("LLM response error: {}", e)
-            }))
+            })
+            )
         })
     } else {
         debug!("Local LLM response");
@@ -79,13 +85,27 @@ pub async fn handle_request(
             &full_user_prompt,
             &session_id,
             "user_id",
-            chat_request_type,
-        )
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(json!({
+            chat_request_type
+        ).await.map_err(|e| {
+            actix_web::error::ErrorInternalServerError(
+                json!({
                 "error": format!("Local LLM response error: {}", e)
-            }))
+            })
+            )
         })
     }
 }
+
+// TODO try adding this dynamically to all prompts
+const FORMATTING_PROMPT: &str =
+    r#"
+    For formatting:
+    - Use Gfm if necessary
+    - Use proper tabs spaces and indentation.
+    - Use single-line code blocks with `<code here>`.
+    - Use comments syntax of the programming language for comments in code blocks.
+    - Use multi-line blocks with:
+    ```<language>
+    <code here>
+    ```
+    "#;
