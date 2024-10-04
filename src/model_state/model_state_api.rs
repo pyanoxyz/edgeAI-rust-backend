@@ -1,4 +1,3 @@
-use crate::ModelState;
 use actix_web::{ get, web, HttpResponse, Error };
 use serde_json::json;
 use log::debug;
@@ -8,6 +7,7 @@ use sysinfo::{ ProcessExt, System, SystemExt };
 use serde::Deserialize;
 use tokio::time::{ sleep, Duration, Instant }; // Import sleep and Duration from tokio
 use tokio::process::Command;
+use crate::model_state::state::ModelState;
 
 pub fn model_state_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(mode_state)
