@@ -7,9 +7,9 @@ fn main() {
     // Get the home directory
     if let Some(home_dir) = home_dir() {
 
-        // println!("cargo:rustc-link-search=native=/usr/lib");
+        println!("cargo:rustc-link-search=native=/usr/lib");
         println!("cargo:rustc-link-lib=c++");
-        // println!("cargo:rustc-link-arg=-stdlib=libc++");
+        println!("cargo:rustc-link-arg=-stdlib=libc++");
 
         // println!("cargo:rustc-link-arg=-framework");
         // println!("cargo:rustc-link-arg=CoreML");

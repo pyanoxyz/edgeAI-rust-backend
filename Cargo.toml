@@ -11,6 +11,7 @@ dirs = "5.0.1"
 
 [dependencies]
 actix-web = "4"         # The main web framework
+actix-cors = "0.7.0"  
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] } # For JSON (optional)
 serde_json = "1.0"       # For JSON (optional)
