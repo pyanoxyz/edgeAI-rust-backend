@@ -5,6 +5,7 @@ pub mod chat_refactor;
 pub mod chat_testcases;
 pub mod chat_findbugs;
 pub mod chat_docstring;
+mod utils;
 // pub use chat_infill::register_routes as chat_fill_routes;
 pub use chat_plain::register_routes as chat_plain_routes;
 // pub use chat_explain::register_routes as chat_explain_routes;
