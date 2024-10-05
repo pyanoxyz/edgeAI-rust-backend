@@ -19,7 +19,6 @@ mod database;
 mod embeddings;
 mod rerank;
 mod prompt_compression;
-mod history;
 mod parser;
 mod rag;
 mod pair_programmer;
@@ -114,7 +113,7 @@ async fn main() -> std::io::Result<()> {
             .configure(chats::chat_testcases_routes) // Add chat testcases routes
             .configure(chats::chat_findbugs_routes) // Add chatfindbugs routes
             .configure(chats::chat_docstring_routes) // Add docstring routes
-            .configure(history::histoy_register_routes) // Add chat explain routes
+            .configure(chats::chat_history_routes) // Add docstring routes
             .configure(rag::code_rag_api::register_routes) // Add chat explain routes
             .configure(pair_programmer::pair_programmer_api::register_routes) // Add chat explain routes
     })

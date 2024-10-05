@@ -49,26 +49,25 @@ impl DBConfig{
 
     }
      
-    pub fn fetch_chats_for_user(&self, user_id: &str) -> Vec<Value> {
+    pub fn fetch_chats_all(&self) -> Vec<Value> {
         // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
     
         // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
         let mut stmt = connection
             .prepare(
-                "SELECT id, user_id, session_id, prompt, compressed_prompt, response, timestamp 
-                 FROM chats 
-                 WHERE user_id = ?
-                 ORDER BY timestamp ASC",
+                "SELECT id, user_id, session_id, prompt, compressed_prompt, response, timestamp, request_type
+                FROM chats
+                WHERE user_id = ?
+                ORDER BY timestamp ASC",
             )
             .unwrap();
     
         // Create a vector to hold the chat entries in JSON format
         let mut chats: Vec<Value> = Vec::new();
-    
         // Execute the query and iterate over the rows, collecting them into the vector
         let chat_iter = stmt
-            .query_map([user_id], |row| {
+            .query_map(["user_id"], |row| {
                 Ok(json!({
                     "id": row.get::<_, String>(0)?,  // id
                     "user_id": row.get::<_, String>(1)?,  // user_id
@@ -77,6 +76,8 @@ impl DBConfig{
                     "compressed_prompt": row.get::<_, String>(4)?,  // compressed_prompt
                     "response": row.get::<_, String>(5)?,  // response
                     "timestamp": row.get::<_, String>(6)?,  // timestamp
+                    "request_type": row.get::<_, String>(7)?,  // timestamp
+                    
                 }))
             })
             .unwrap();
@@ -89,16 +90,16 @@ impl DBConfig{
         chats
     }
 
-    pub fn fetch_chats_for_session_and_user(&self, session_id: &str, user_id: &str) -> Vec<Value> {
+    pub fn fetch_chats_for_session(&self, session_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
     
         // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
         let mut stmt = connection
             .prepare(
-                "SELECT id, user_id, session_id, prompt, compressed_prompt, response, timestamp 
+                "SELECT id, user_id, session_id, prompt, response, timestamp, request_type
                  FROM chats 
-                 WHERE session_id = ? AND user_id = ?
+                 WHERE session_id = ?
                  ORDER BY timestamp ASC",
             )
             .unwrap();
@@ -108,15 +109,55 @@ impl DBConfig{
     
         // Execute the query and iterate over the rows, collecting them into the vector
         let chat_iter = stmt
-            .query_map([session_id, user_id], |row| {
+            .query_map([session_id], |row| {
                 Ok(json!({
                     "id": row.get::<_, String>(0)?,  // id
                     "user_id": row.get::<_, String>(1)?,  // user_id
                     "session_id": row.get::<_, String>(2)?,  // session_id
                     "prompt": row.get::<_, String>(3)?,  // prompt
-                    "compressed_prompt": row.get::<_, String>(4)?,  // compressed_prompt
-                    "response": row.get::<_, String>(5)?,  // response
-                    "timestamp": row.get::<_, String>(6)?,  // timestamp
+                    "response": row.get::<_, String>(4)?,  // response
+                    "timestamp": row.get::<_, String>(5)?,  // timestamp
+                    "request_type": row.get::<_, String>(6)?,  // timestamp
+                }))
+            })
+            .unwrap();
+    
+        // Collect all rows into the `chats` vector
+        for chat in chat_iter {
+            chats.push(chat.unwrap());
+        }
+    
+        chats
+    }
+
+    pub fn fetch_chats_for_request_type(&self, request_type: &str) -> Vec<Value> {
+        // Lock the mutex to access the connection
+        let connection = self.connection.lock().unwrap();
+    
+        // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
+        let mut stmt = connection
+            .prepare(
+                "SELECT id, user_id, session_id, prompt, response, timestamp, request_type
+                 FROM chats 
+                 WHERE request_type = ?
+                 ORDER BY timestamp ASC",
+            )
+            .unwrap();
+    
+        // Create a vector to hold the chat entries
+        let mut chats: Vec<Value> = Vec::new();
+    
+        // Execute the query and iterate over the rows, collecting them into the vector
+        let chat_iter = stmt
+            .query_map([request_type], |row| {
+                Ok(json!({
+                    "id": row.get::<_, String>(0)?,  // id
+                    "user_id": row.get::<_, String>(1)?,  // user_id
+                    "session_id": row.get::<_, String>(2)?,  // session_id
+                    "prompt": row.get::<_, String>(3)?,  // prompt
+                    "response": row.get::<_, String>(4)?,  // response
+                    "timestamp": row.get::<_, String>(5)?,  // timestamp
+                    "request_type": row.get::<_, String>(6)?,  // timestamp
                 }))
             })
             .unwrap();

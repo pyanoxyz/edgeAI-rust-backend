@@ -69,23 +69,6 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 }
 
 
-/// Handle the end of the stream by processing accumulated content
-/// This user_prompt is the original prompt that user has gave us
-/// not the prompt with context because that has already been passed in llm_request
-// async fn parse_steps_and_store(
-//     input: &str,
-//     user_prompt: &str,
-//     user_id: &str,
-//     session_id: &str,
-//     pair_programmer_id: &str
-// ) {
-//     let steps = parse_steps(input);
-//     for step in &steps {
-//         println!("{:?}", step);
-//     }
-//     DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, pair_programmer_id, user_prompt, &steps); 
-// }
-
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
     data: web::Json<GenerateStepsRequest>,
@@ -156,8 +139,6 @@ async fn get_steps(path: web::Path<String>) -> Result<HttpResponse, Error> {
     // Return the result as JSON
     Ok(HttpResponse::Ok().json(steps))
 }
-
-
 
 
 #[post("/pair-programmer/steps/execute")]
