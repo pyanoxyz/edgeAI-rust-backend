@@ -107,14 +107,13 @@ async fn main() -> std::io::Result<()> {
             .service(echo) // Register the POST route
             .service(json_handler) // Register the POST route for JSON
             .configure(model_state::model_state_api::model_state_routes)
-            // .configure(chats::chat_fill_routes) // Add chat_fill routes
+            .configure(chats::chat_infill_routes) // Add chat_fill routes
             .configure(chats::chat_plain_routes) // Add chat routes
-            // .configure(chats::chat_explain_routes) // Add chat explain routes
-            // .configure(chats::chat_explain_routes) // Add chat explain routes
-            // .configure(chats::chat_refactor_routes) // Add chat refactor routes
-            // .configure(chats::chat_testcases_routes) // Add chat testcases routes
-            // .configure(chats::chat_findbugs_routes) // Add chatfindbugs routes
-            // .configure(chats::chat_docstring_routes) // Add docstring routes
+            .configure(chats::chat_explain_routes) // Add chat explain routes
+            .configure(chats::chat_refactor_routes) // Add chat refactor routes
+            .configure(chats::chat_testcases_routes) // Add chat testcases routes
+            .configure(chats::chat_findbugs_routes) // Add chatfindbugs routes
+            .configure(chats::chat_docstring_routes) // Add docstring routes
             .configure(history::histoy_register_routes) // Add chat explain routes
             .configure(rag::code_rag_api::register_routes) // Add chat explain routes
             .configure(pair_programmer::pair_programmer_api::register_routes) // Add chat explain routes
