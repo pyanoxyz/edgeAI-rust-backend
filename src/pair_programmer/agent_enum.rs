@@ -4,9 +4,10 @@ use crate::pair_programmer::{agent_planner::PlannerAgent,
     agent_system_code::SystemCodeAgent,
     agent_rethinker::RethinkerAgent,
     agent_chat::ChatAgent,
-    agent::{Agent, AccumulatedStream}};
+    agent::Agent};
 use async_trait::async_trait;
 use actix_web::Error as ActixError;
+use crate::llm_stream::types::AccumulatedStream;
 
 pub enum AgentEnum {
     GenerateCode(Box<dyn Agent>),

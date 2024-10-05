@@ -1,5 +1,5 @@
 use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
-use crate::chats::chat_struct::stream_to_client;
+use crate::llm_stream::handle::stream_to_chat_client;
 use serde::{ Deserialize, Serialize };
 use crate::request_type::RequestType;
 use std::sync::{Arc, Mutex};
@@ -87,7 +87,7 @@ pub async fn chat(data: web::Json<ChatRequest>, _req: HttpRequest) -> Result<Htt
         Reflect, verify correctness, and explain concisely.
     "#;
 
-    let response = stream_to_client(
+    let response = stream_to_chat_client(
         &session_id,
         system_prompt,
         &prompt_with_context,

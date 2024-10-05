@@ -2,7 +2,7 @@ use uuid::Uuid;
 use serde_json::json;
 use async_stream::stream;
 use actix_web::FromRequest;
-use futures_util::StreamExt; // Import this trait for accessing `.next()`
+// use futures_util::{Stream, StreamExt}; // Import this trait for accessing `.next()`
 use std::sync::{Arc, Mutex};
 use log::{info, debug, error};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,8 @@ use crate::prompt_compression::compress::get_attention_scores;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
 use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
+use futures::StreamExt; // Ensure StreamExt is imported
+
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -138,77 +140,7 @@ pub async fn pair_programmer_generate_steps(
 
     Ok(response)
 
-    // let stream_result = planner_agent.execute().await;
-    // let mut stream = match stream_result {
-    //     Ok(s) => s,
-    //     Err(e) => {
-    //         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-    //             "error": format!("Local LLM response error: {}", e)
-    //         })));
-    //     }
-    // };
 
-    // // Create a channel to wait for the stream completion
-    // let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-
-    // // Stream chunks to the client in real time and accumulate
-    // let response_stream = stream! {
-    //     while let Some(chunk_result) = stream.next().await {
-    //         match chunk_result {
-    //             Ok(chunk) => {
-    //                 if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-    //                     // Accumulate the content in memory
-    //                     {
-    //                         let mut accumulated = accumulated_content_clone.lock().unwrap();
-    //                         accumulated.push_str(chunk_str);
-    //                     }
-
-    //                     // Yield each chunk to the stream
-    //                     yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
-    //                 }
-    //             }
-    //             Err(e) => {
-    //                 yield Err(actix_web::error::ErrorInternalServerError(format!(
-    //                     "Error while streaming: {}",
-    //                     e
-    //                 )));
-    //             }
-    //         }
-    //     }
-
-    //     // Notify that streaming is complete
-    //     let _ = tx.send(());
-    // };
-
-    // // Return the response as a streaming body
-    // let response = HttpResponse::Ok()
-    //     .content_type("application/json")
-    //     .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
-    //     .streaming(response_stream);
-
-    // // Wait for the streaming to complete before unwrapping the accumulated content
-    // tokio::spawn(async move {
-    //     // Wait until the channel receives the completion signal
-    //     let _ = rx.await;
-
-    //     // Unwrap the accumulated content after streaming is done
-    //     let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-    //         .unwrap_or_else(|_| Mutex::new(String::new()))
-    //         .into_inner()
-    //         .unwrap();
-
-    //     // Print the accumulated content after streaming is completed
-    //     println!("Final accumulated content: {}", accumulated_content_final);
-    //     parse_steps_and_store(
-    //         &accumulated_content_final,
-    //         &data.task.clone(),
-    //         &user_id,
-    //         &session_id,
-    //         &pair_programmer_id
-    //     ).await;
-    // });
-
-    // Ok(response)
 }
 
 
@@ -507,6 +439,7 @@ async fn stream_to_client(
     let response_stream = stream! {
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
+                  // Ensure `chunk` is a reference to `[u8]` or `Bytes`
                 Ok(chunk) => {
                     if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
                         // Accumulate the content in memory
@@ -516,7 +449,7 @@ async fn stream_to_client(
                         }
 
                         // Yield each chunk to the stream
-                        yield Ok::<_, Error>(web::Bytes::from(chunk_str.to_owned()));
+                        yield Ok::<web::Bytes, Error>(web::Bytes::from(chunk_str.to_owned()));
                     }
                 }
                 Err(e) => {

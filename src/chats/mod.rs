@@ -2,7 +2,6 @@ pub mod chat_infill;
 pub mod chat_plain;
 pub mod chat_explain;
 pub mod chat_refactor;
-pub mod chat_struct;
 pub mod chat_testcases;
 pub mod chat_findbugs;
 pub mod chat_docstring;
