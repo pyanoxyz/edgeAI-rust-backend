@@ -3,6 +3,8 @@ use tree_sitter::{Parser, Language};
 use log::info;
 use std::path::Path;
 use std::ffi::CString;
+use dirs::home_dir;
+use std::fs::{self, create_dir_all};
 
 // Define function signatures for the `tree_sitter_LANGUAGE` functions.
 type LanguageFn = unsafe fn() -> Language;
@@ -18,9 +20,17 @@ impl ParserLoader {
         unsafe{
             //let current_dir: PathBuf = env::current_dir().expect("Failed to get current directory");
 
-            // Construct the absolute path to the shared library
-            let lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/languages.so";
-            let sol_lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/solidity-language.so";
+            let home_dir = home_dir().expect("Failed to retrieve home directory");
+            let parsers_dir = home_dir.join(".pyano/parsers");    // Spawn a new thread for downloading the model and initialization
+            // Ensure the model directory exists
+            create_dir_all(&parsers_dir).expect("Failed to create parsers directory");
+            let lib_path = parsers_dir.join("languages.so");
+            let sol_lib_path = parsers_dir.join("solidity-language.so");
+        
+
+            // // Construct the absolute path to the shared library
+            // let lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/languages.so";
+            // let sol_lib_path = "/Users/saurav/Programs/pyano/rust-backend/src/parser/solidity-language.so";
 
             info!("Libpath is {:?}",lib_path);
 
