@@ -2,6 +2,7 @@ use actix_web::{HttpRequest, HttpResponse};
 use serde_json::json;
 use std::collections::HashMap;
 use crate::utils::is_cloud_execution_mode;
+use log::debug;
 use actix_web::HttpMessage;  // <-- Bring the HttpMessage trait into scope
 // Structs to represent the user and subscription details
 #[derive(Clone)]
@@ -72,6 +73,7 @@ pub async fn is_request_allowed(req: HttpRequest) -> Result<Option<User>, HttpRe
 // Mock database lookup (replace with actual DB access)
 async fn find_user_by_api_key(api_key: &str) -> Option<User> {
     // Simulate finding the user by API key
+    debug!("Implement mongodb retrivela for cloud execution mode for {}", api_key);
     Some(User {
         user_id: "some_user_id".to_string(),
         subscription: Subscription {

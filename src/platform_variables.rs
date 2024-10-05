@@ -1,6 +1,6 @@
 
 use crate::utils::get_total_ram;
-use log::{debug, info};
+use log::info;
 
 const LLAMA_PROMPT_TEMPLATE: &str = r#"
     <|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>

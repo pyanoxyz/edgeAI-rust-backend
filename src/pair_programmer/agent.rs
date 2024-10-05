@@ -1,84 +1,81 @@
-use async_trait::async_trait;
-use dotenv::dotenv;
 use log::debug;
+use log::error;
+use bytes::Bytes;
+use std::pin::Pin;
 use reqwest::Client;
 use serde_json::json;
-use std::env;
-use crate::platform_variables::get_default_prompt_template;
-// use std::error::Error as StdError;
-use tokio::sync::mpsc;
-use bytes::Bytes;
-use futures::stream::unfold;
 use serde_json::Value;
-use std::error::Error as StdError;  // Importing the correct trait
-use std::pin::Pin;
+use tokio::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use futures::stream::unfold;
+use async_trait::async_trait;
 use futures::{Stream, StreamExt}; // Ensure StreamExt is imported
-use std::sync::{Arc, Mutex};    
-use std::process;
-use futures_util::stream::TryStreamExt;
+use std::error::Error as StdError;  // Importing the correct trait
 use reqwest::Error as ReqwestError;
 use actix_web::Error as ActixError;
-use log::error;
+use futures_util::stream::TryStreamExt;
 use tokio_stream::wrappers::ReceiverStream;
+use crate::platform_variables::get_default_prompt_template;
+use crate::utils::{get_llm_temperature, is_cloud_execution_mode, get_local_url, get_remote_url, get_cloud_api_key};
 
 
 
 pub type AccumulatedStream = Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>;
 
-// Function to read the CLOUD_EXECUTION_MODE from the environment
-pub fn is_cloud_execution_mode() -> bool {
+// // Function to read the CLOUD_EXECUTION_MODE from the environment
+// pub fn is_cloud_execution_mode() -> bool {
 
-    dotenv().ok(); // Load the .env file if it exists
-    let cloud_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "false".to_string());
-    cloud_mode == "true"
-}
-
-
-pub fn get_local_url() -> String {
-    dotenv().ok(); // Load the .env file if it exists
-    env::var("LOCAL_URL").unwrap_or_else(|_| {
-        eprintln!("Error: Environment variable LOCAL_URL is not set.");
-        process::exit(1); // Exit the program with an error code
-    })
-}
-
-pub fn get_remote_url() -> String {
-    dotenv().ok(); // Load the .env file if it exists
-    env::var("REMOTE_URL").unwrap_or_else(|_| {
-        eprintln!("Error: Environment variable REMOTE_URL is not set.");
-        process::exit(1); // Exit the program with an error code
-    })
-}
+//     dotenv().ok(); // Load the .env file if it exists
+//     let cloud_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "false".to_string());
+//     cloud_mode == "true"
+// }
 
 
-pub fn get_cloud_api_key() -> String {
-    dotenv().ok(); // Load the .env file if it exists
-    env::var("CLOUD_API_KEY").unwrap_or_else(|_| {
-        eprintln!("Error: Environment variable CLOUD_API_KEY is not set.");
-        process::exit(1); // Exit the program with an error code
-    })
-}
+// pub fn get_local_url() -> String {
+//     dotenv().ok(); // Load the .env file if it exists
+//     env::var("LOCAL_URL").unwrap_or_else(|_| {
+//         eprintln!("Error: Environment variable LOCAL_URL is not set.");
+//         process::exit(1); // Exit the program with an error code
+//     })
+// }
 
-pub fn get_llm_temperature() -> f64 {
-    dotenv().ok(); // Load the .env file if it exists
-    env::var("TEMPERATURE").unwrap_or_else(|_| {
-        eprintln!("Error: Environment variable TEMPERATURE is not set.");
-        process::exit(1); // Exit the program with an error code
-    })
-    .parse::<f64>()
-    .unwrap_or_else(|_|{
-        eprintln!("Error: Failed to parse TEMPERATURE as a float.");
-        process::exit(1); // Exit with an error if parsing fails
-    })   
-}
+// pub fn get_remote_url() -> String {
+//     dotenv().ok(); // Load the .env file if it exists
+//     env::var("REMOTE_URL").unwrap_or_else(|_| {
+//         eprintln!("Error: Environment variable REMOTE_URL is not set.");
+//         process::exit(1); // Exit the program with an error code
+//     })
+// }
 
-// Load the environment variables from a `.env` file
-fn load_env() {
-    let current_dir =  env::current_dir().unwrap();
-    let top_dir = current_dir.parent().unwrap().parent().unwrap();
-    let dotenv_path = top_dir.join(".env");
-    dotenv::from_path(dotenv_path).ok();
-}
+
+// pub fn get_cloud_api_key() -> String {
+//     dotenv().ok(); // Load the .env file if it exists
+//     env::var("CLOUD_API_KEY").unwrap_or_else(|_| {
+//         eprintln!("Error: Environment variable CLOUD_API_KEY is not set.");
+//         process::exit(1); // Exit the program with an error code
+//     })
+// }
+
+// pub fn get_llm_temperature() -> f64 {
+//     dotenv().ok(); // Load the .env file if it exists
+//     env::var("TEMPERATURE").unwrap_or_else(|_| {
+//         eprintln!("Error: Environment variable TEMPERATURE is not set.");
+//         process::exit(1); // Exit the program with an error code
+//     })
+//     .parse::<f64>()
+//     .unwrap_or_else(|_|{
+//         eprintln!("Error: Failed to parse TEMPERATURE as a float.");
+//         process::exit(1); // Exit with an error if parsing fails
+//     })   
+// }
+
+// // Load the environment variables from a `.env` file
+// fn load_env() {
+//     let current_dir =  env::current_dir().unwrap();
+//     let top_dir = current_dir.parent().unwrap().parent().unwrap();
+//     let dotenv_path = top_dir.join(".env");
+//     dotenv::from_path(dotenv_path).ok();
+// }
 
 #[async_trait]
 pub trait Agent: Send + Sync {
@@ -91,7 +88,7 @@ pub trait Agent: Send + Sync {
     }
 
     async fn execute(&self) -> Result<AccumulatedStream, ActixError> {
-        let prompt = self.get_prompt();
+        let _prompt = self.get_prompt();
 
         let stream: AccumulatedStream = if is_cloud_execution_mode() {
             remote_agent_execution(&self.get_system_prompt(), &self.get_prompt_with_context())

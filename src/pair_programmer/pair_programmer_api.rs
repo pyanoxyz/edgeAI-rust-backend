@@ -1,20 +1,19 @@
-use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
-use serde::{Deserialize, Serialize};
-use crate::pair_programmer::agent_enum::AgentEnum;
-use crate::pair_programmer::agent::Agent;
 use uuid::Uuid;
-use crate::database::db_config::DB_INSTANCE;
-use log::{info, debug, error};
-use actix_web::FromRequest;
-use crate::summarization::summarize::summarize_text;
-use crate::embeddings::text_embeddings::generate_text_embedding;
-use crate::prompt_compression::compress::get_attention_scores;
-// Import this trait to use `from_request`
-use std::sync::{Arc, Mutex};    
-use futures_util::StreamExt; // Import this trait for accessing `.next()`
-use async_stream::stream;
-use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 use serde_json::json;
+use async_stream::stream;
+use actix_web::FromRequest;
+use futures_util::StreamExt; // Import this trait for accessing `.next()`
+use std::sync::{Arc, Mutex};
+use log::{info, debug, error};
+use serde::{Deserialize, Serialize};
+use crate::pair_programmer::agent::Agent;
+use crate::database::db_config::DB_INSTANCE;
+use crate::pair_programmer::agent_enum::AgentEnum;
+use crate::summarization::summarize::summarize_text;
+use crate::prompt_compression::compress::get_attention_scores;
+use crate::embeddings::text_embeddings::generate_text_embedding;
+use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
+use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -88,7 +87,7 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
     data: web::Json<GenerateStepsRequest>,
-    req: HttpRequest,
+    _req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
 
     let user_id = data.user_id.clone().unwrap_or_else(|| "user_id".to_string());
@@ -319,7 +318,6 @@ pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<Htt
     };
     
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
-    let step_number = valid_data.step_number.clone();
     let step_number = parse_step_number(&valid_data.step_number)?;
     info!("step_number={}", step_number);
 
@@ -333,7 +331,7 @@ pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<Htt
         }
     };
 
-    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&step_chat).await;
+    let result = get_attention_scores(&step_chat).await;
     let tokens = match result {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -345,7 +343,7 @@ pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<Htt
     };
 
     let embeddings_result = generate_text_embedding(&step_chat).await;
-    let embeddings = match embeddings_result {
+    match embeddings_result {
         Ok(embeddings) => embeddings,
         Err(e) =>  {
             let error_response = ErrorResponse {
@@ -394,7 +392,7 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
     let(step_number, 
         task_heading, 
         _, 
-        step_chat, 
+        _, 
         all_steps, 
         steps_executed_so_far, 
         _) = data_validation(&pair_programmer_id, step_number).unwrap();
@@ -546,8 +544,8 @@ async fn stream_to_client(
 async fn handle_stream_completion_rethinker(
     rx: tokio::sync::oneshot::Receiver<()>,
     accumulated_content: Arc<Mutex<String>>,
-    pair_programmer_id: String,
-    step_number: usize
+    _pair_programmer_id: String,
+    _step_number: usize
 ) {
     // Wait until the channel receives the completion signal
     let _ = rx.await;

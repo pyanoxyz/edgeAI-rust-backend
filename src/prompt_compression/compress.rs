@@ -1,6 +1,7 @@
 // use rust_bert::distilbert::{DistilBertConfig, DistilBertModelMaskedLM};
 use rust_bert::bert::{BertConfig, BertForMaskedLM};
-
+use std::error::Error;
+use log::error;
 use rust_bert::resources::{RemoteResource, ResourceProvider};
 use rust_bert::Config;
 use rust_tokenizers::tokenizer::{BertTokenizer, Tokenizer, TruncationStrategy};
@@ -8,18 +9,16 @@ use tch::{nn, Device, Tensor, no_grad};
 use std::path::Path;
 use std::fs;
 use anyhow::Result;
-use std::env;
-use tokio::task;
-use log::{debug,info};
+use log::debug;
 use std::fs::create_dir_all;
 use tch::IndexOp;
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions};
 /// Directory to save the model
-const ROOT_PYANO_DIR: &str = ".pyano";
-const PYANO_MODELS_DIR: &str = ".pyano/models";
 use std::io::{Read, Write};  // Import the required traits
-
+use dirs::home_dir;
+use std::sync::{Mutex, Arc};
+use once_cell::sync::Lazy;
 pub struct AttentionCalculator {
     model: BertForMaskedLM,
     tokenizer: BertTokenizer,
@@ -101,7 +100,7 @@ impl AttentionCalculator {
                 .forward_t(Some(&input_ids), None, None, None, None, None, None, false)
         });
                 
-        let mut self_attention_scores: Vec<f32> = Vec::new();
+        let mut self_attention_scores: Vec<f32> ;
         if let Some(attentions) = outputs.all_attentions {
 
             if let Some(last_attention) = attentions.last() {
@@ -244,36 +243,112 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
     Ok(())
 }
 
-
-pub async fn get_attention_scores(text: &str) -> Result<Vec<String>> {
-    let home_dir = env::home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
-    let pyano_models_dir = home_dir.join(".pyano/models");
+static ATTENTION_MODEL: Lazy<Result<Arc<Mutex<AttentionCalculator>>, Box<dyn Error + Send + Sync>>> = Lazy::new(|| {
+    let home_dir = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
+    let model_dir = home_dir.join(".pyano/models");
 
     // Ensure the model directory exists
-    fs::create_dir_all(&pyano_models_dir)?;
+    fs::create_dir_all(&model_dir)?;
 
     // Ensure the model is downloaded
-    let pyano_models_dir_str = pyano_models_dir
+    let model_dir_str = model_dir
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert PathBuf to str"))?
         .to_string();
+    download_and_save_model(&model_dir_str).map_err(|e| anyhow::anyhow!(e))?;
 
-    // Clone variables for the closure
-    let text_clone = text.to_string();
-    let pyano_models_dir_str_clone = pyano_models_dir_str.clone();
+    let attention_calculator = AttentionCalculator::new(&model_dir_str).unwrap();
+    println!("attention_calculator loaded successfully.");
+    Ok(Arc::new(Mutex::new(attention_calculator)))
+});
 
-    // Run the download_and_save_model in a blocking task
-    let tokens: Vec<String> = task::spawn_blocking(move || -> Result<Vec<String>, anyhow::Error> {
-        // Download and save the model, handle any errors
-        download_and_save_model(&pyano_models_dir_str_clone).map_err(|e| anyhow::anyhow!(e))?;
+// pub async fn get_attention_scores(text: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+//     let home_dir = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
+//     let pyano_models_dir = home_dir.join(".pyano/models");
 
-        // Create the AttentionCalculator
-        let attention_calculator = AttentionCalculator::new(&pyano_models_dir_str_clone)?;
+//     // Ensure the model directory exists
+//     fs::create_dir_all(&pyano_models_dir)?;
 
-        // Calculate attention scores for the input text Larger value will give less content
-        let tokens = attention_calculator.calculate_attention_scores(&text_clone, 0.04)?;
+//     // Ensure the model is downloaded
+//     let pyano_models_dir_str = pyano_models_dir
+//         .to_str()
+//         .ok_or_else(|| anyhow::anyhow!("Failed to convert PathBuf to str"))?
+//         .to_string();
 
-        Ok(tokens)
+//     // Clone variables for the closure
+//     let text_clone = text.to_string();
+//     let pyano_models_dir_str_clone = pyano_models_dir_str.clone();
+
+//     // Run the download_and_save_model in a blocking task
+//     let tokens: Vec<String> = task::spawn_blocking(move ||{
+//         // Download and save the model, handle any errors
+//         download_and_save_model(&pyano_models_dir_str_clone).map_err(|e| anyhow::anyhow!(e))?;
+
+//         // Create the AttentionCalculator
+//         let attention_calculator = AttentionCalculator::new(&pyano_models_dir_str_clone)?;
+
+//         // Calculate attention scores for the input text Larger value will give less content
+//         let tokens = attention_calculator.calculate_attention_scores(&text_clone, 0.04)?;
+
+//         Ok::<Vec<String>, Box<dyn Error + Send + Sync>>(tokens.clone())
+//     })
+//     .await??;
+
+//     Ok(tokens)
+// }
+
+
+// pub async fn get_attention_scores(text: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+//     let text_owned = text.to_string();
+
+//     // Use block_in_place to run blocking code
+//     let tokens: Vec<String> = tokio::task::block_in_place(move || {
+//         // Access the model
+//         let model = ATTENTION_MODEL.as_ref().map_err(|e| {
+//             error!("Failed to initialize attention model: {}", e);
+//             "Failed to initialize attention model"
+//         })?;
+
+//         let attention_calculator = model.lock().unwrap();  // Safely access the model
+//         let tokens = attention_calculator.calculate_attention_scores(&text_owned, 0.04)?;
+//         Ok::<Vec<f32>, Box<dyn Error + Send + Sync>>(tokens.clone())
+//     })?;
+
+//     Ok(tokens)
+// }
+// pub async fn get_attention_scores(text: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+//     let text_owned = text.to_string();
+
+//     // Use block_in_place to run blocking code
+//     let tokens = tokio::task::block_in_place(move || {
+//         // Access the model
+//         let model = ATTENTION_MODEL.as_ref().map_err(|e| {
+//             error!("Failed to initialize attention model: {}", e);
+//             "Failed to initialize attention model"
+//         })?;
+
+//         let attention_calculator = model.lock().unwrap();  // Safely access the model
+//         let tokens = attention_calculator.calculate_attention_scores(&text_owned, 0.04)?;
+//         Ok::<Vec<String>, Box<dyn Error + Send + Sync>>(tokens)
+//     })?;
+
+//     Ok(tokens)
+// }
+
+pub async fn get_attention_scores(text: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    let text_owned = text.to_string();
+
+    // Use `spawn_blocking` to run the blocking code
+    let tokens = tokio::task::spawn_blocking(move || {
+        // Access the model
+        let model = ATTENTION_MODEL.as_ref().map_err(|e| {
+            error!("Failed to initialize attention model: {}", e);
+            "Failed to initialize attention model"
+        })?;
+
+        let attention_calculator = model.lock().unwrap();  // Safely access the model
+        let tokens = attention_calculator.calculate_attention_scores(&text_owned, 0.04)?;
+        Ok::<Vec<String>, Box<dyn Error + Send + Sync>>(tokens)
     })
     .await??;
 

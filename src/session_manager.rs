@@ -34,19 +34,7 @@ impl SessionManager {
         Arc::clone(&INSTANCE)
     }
 
-    // Get the current session, create a new one if none exists
-    fn get_session(&self) -> Session {
-        let mut session_guard = self.session.lock().unwrap();
-
-        // If no session exists, create a new one
-        if session_guard.is_none() {
-            *session_guard = Some(Session::new());
-        }
-
-        session_guard.clone().unwrap()
-    }
-
-    // Create a new session explicitly
+    // Get the current session, create a new one if none exists    // Create a new session explicitly
     fn create_new_session(&self) -> Session {
         let new_session = Session::new();
         let mut session_guard = self.session.lock().unwrap();
@@ -54,10 +42,7 @@ impl SessionManager {
         new_session
     }
 
-    // Get the session ID of the current session
-    fn get_session_id(&self) -> String {
-        self.get_session().id
-    }
+
 }
 // Function to check session ID
 

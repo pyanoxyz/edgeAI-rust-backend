@@ -1,14 +1,13 @@
 use anyhow::Result;
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
 use rust_bert::resources::{LocalResource, RemoteResource, ResourceProvider}; // Import ResourceProvider for get_local_path
-use rust_bert::Config;
-use rust_bert::bart::BartConfig;
+
 use rust_bert::pipelines::common::ModelResource;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use log::debug;
 use std::sync::Once;
-use std::env;
+use dirs::home_dir;
 use tokio::task::LocalSet;
 use tokio::task;
 
@@ -135,7 +134,7 @@ pub fn download_and_save_model(save_path: &str) -> Result<()> {
 
 
 pub async fn summarize_text(text: &str) -> Result<String> {
-    let home_dir = env::home_dir().expect("Failed to retrieve home directory");
+    let home_dir = home_dir().expect("Failed to retrieve home directory");
     let summarization_dir = home_dir.join(".pyano/models/summarization_model");    // Spawn a new thread for downloading the model and initialization
            // Ensure the model directory exists
            create_dir_all(&summarization_dir).expect("Failed to create model directory");

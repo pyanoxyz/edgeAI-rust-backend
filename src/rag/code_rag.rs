@@ -68,7 +68,7 @@ async fn download_github_repo(repo_url: &str, temp_dir: &TempDir) -> Result<Stri
     // let repo_dir = temp_dir.path().to_path_buf();
     
     // Clone the repository using git2
-    let repo = Repository::clone(&validated_url, &repo_dir)?;
+    Repository::clone(&validated_url, &repo_dir)?;
 
     // Alternatively, you could use the Git command-line tool with tokio for async execution:
     // Command::new("git")
@@ -311,7 +311,7 @@ async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
 
 
 async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
-    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&chunk.content).await;
+    let result: Result<Vec<String>, Box<dyn Error + Send + Sync>> = get_attention_scores(&chunk.content).await;
     let tokens = match result {
         Ok(tokens) => tokens,
         Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);

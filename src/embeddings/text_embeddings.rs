@@ -3,13 +3,13 @@ use dirs;
 use std::path::{Path, PathBuf};
 use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsModel};
 use tch::Device;
-use tokio::task;
 use std::fs::{self, File};
-use std::sync::{Once, Mutex, Arc};
+use std::sync::{Mutex, Arc};
+use once_cell::sync::Lazy;
 use reqwest::blocking::Client;
 use std::io::Cursor;
-use tokio::task::LocalSet;
-use log::info;
+use log::{info, error};
+use dirs::home_dir;
 const BASE_URL: &str = "https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2/resolve/main/";
 
 const FILES: &[&str] = &[
@@ -106,42 +106,58 @@ impl EmbeddingsManager {
     }
 }
 
-// Global synchronization objects to initialize the model only once
-static INIT: Once = Once::new();
-static mut EMBEDDINGS_MODEL: Option<Arc<Mutex<SentenceEmbeddingsModel>>> = None;
+// The Lazy initialization will ensure that the model is loaded only once during the application's lifecycle.
+static EMBEDDINGS_MODEL: Lazy<Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dyn Error + Send + Sync>>> = Lazy::new(|| {
+    let home_dir = home_dir().ok_or_else(|| anyhow::anyhow!("Failed to retrieve home directory"))?;
+    let models_dir = home_dir.join(".pyano/models/embed_model");
 
-// Function to ensure model is initialized only once
-fn ensure_initialized(manager: &EmbeddingsManager) -> Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dyn Error + Send + Sync>> {
-    unsafe {
-        INIT.call_once(|| {
-            if let Ok(model) = manager.initialize_model() {
-                EMBEDDINGS_MODEL = Some(Arc::new(Mutex::new(model)));
-            }
-        });
+    // Ensure the model directory exists
+    fs::create_dir_all(&models_dir)?;
 
-        // Return the initialized model or error if it failed
-        EMBEDDINGS_MODEL.clone().ok_or_else(|| "Failed to initialize the model.".into())
-    }
-}
+    // Ensure the model is downloaded
+    let models_dir_str = models_dir
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Failed to convert PathBuf to str"))?
+        .to_string();
 
-// This function uses LocalSet to ensure single-threaded execution
+    let manager = EmbeddingsManager::new(&models_dir_str);
+    let model = manager.initialize_model()?;
+    println!("Model loaded successfully.");
+    Ok(Arc::new(Mutex::new(model)))
+});
+
+// // Function to ensure model is initialized only once
+// fn ensure_initialized(manager: &EmbeddingsManager) -> Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dyn Error + Send + Sync>> {
+//     unsafe {
+//         INIT.call_once(|| {
+//             if let Ok(model) = manager.initialize_model() {
+//                 EMBEDDINGS_MODEL = Some(Arc::new(Mutex::new(model)));
+//             }
+//         });
+
+//         // Return the initialized model or error if it failed
+//         EMBEDDINGS_MODEL.clone().ok_or_else(|| "Failed to initialize the model.".into())
+//     }
+// }
+
+
 pub async fn generate_text_embedding(text: &str) -> Result<Vec<f32>, Box<dyn Error + Send + Sync>> {
     let text_owned = text.to_string();
     info!("Generate embedding for Length {}", text.len());
-    // Use LocalSet to run tasks on a single thread
-    let local = LocalSet::new();
-    let embedding = local
-        .run_until(task::spawn_blocking(move || {
-            let manager = EmbeddingsManager::new(".pyano/models/embed_model");
 
-            // Ensure the model is initialized only once
-            let model = ensure_initialized(&manager)?;
+    // Use spawn_blocking to run blocking code
+    let embedding = tokio::task::spawn_blocking(move || {
+        // Access the model
+        let embeddings_model = EMBEDDINGS_MODEL.as_ref().map_err(|e| {
+            error!("Failed to initialize embeddings model: {}", e);
+            "Failed to initialize embeddings model"
+        })?;
 
-            let model_guard = model.lock().unwrap();  // Safely access the model
-            let embeddings = model_guard.encode(&[&text_owned])?;
-            Ok::<Vec<f32>, Box<dyn Error + Send + Sync>>(embeddings[0].clone())
-        }))
-        .await??;
+        let model_guard = embeddings_model.lock().unwrap();  // Safely access the model
+        let embeddings = model_guard.encode(&[&text_owned])?;
+        Ok::<Vec<f32>, Box<dyn Error + Send + Sync>>(embeddings[0].clone())
+    })
+    .await??;  // This is correct; the first ? unwraps the Result from spawn_blocking, and the second ? handles the Result from the closure.
 
     Ok(embedding)
 }

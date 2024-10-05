@@ -3,18 +3,19 @@
 use crate::database::db_config::DBConfig;
 use uuid::Uuid;
 use rusqlite::params;
-use rusqlite::Result;
 use zerocopy::AsBytes;
 use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
+use std::error::Error;
 
 
 impl DBConfig{
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
-    pub fn store_chats(&self, user_id: &str, session_id: &str, prompt: &str, compressed_prompt: &str, response: &str, embeddings: &[f32], request_type: &str) {
+    pub fn store_chats(&self, user_id: &str, session_id: &str, prompt: &str, compressed_prompt: &str, response: &str, embeddings: &[f32], request_type: &str) -> Result<(), Box<dyn Error>> {
             
         // Lock the mutex to access the connection
-        let connection = self.connection.lock().unwrap();
+        let connection = self.connection.lock()
+        .map_err(|_| "Failed to acquire lock for connection")?;        
         let uuid = Uuid::new_v4().to_string();
         let vec_row_id = Self::generate_rowid();
 
@@ -34,7 +35,7 @@ impl DBConfig{
                 timestamp.as_str(),
                 request_type     // Store UTC timestamp as TEXT
             ],
-        ).unwrap();
+        ).map_err(|e| format!("Failed to insert chat record: {}", e))?;
 
         connection.execute(
             "INSERT INTO chat_embeddings (rowid,  embeddings)
@@ -43,7 +44,8 @@ impl DBConfig{
                 vec_row_id,
                 embeddings.as_bytes()         
                 ],
-        ).unwrap();
+        ).map_err(|e| format!("Failed to insert chat api embeddings record: {}", e))?;
+        Ok(())
 
     }
      
@@ -128,29 +130,29 @@ impl DBConfig{
     }
 
     // Example of how to use the RwLock for reading
-    pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>> {
-    let connection = self.connection.lock().unwrap();
-    let mut stmt = connection.prepare(
-        "
-        SELECT
-            id,
-            distance,
-            prompt,
-            compressed_prompt,
-            response
-        FROM chats
-        WHERE embeddings MATCH ?1
-        ORDER BY distance
-        LIMIT ?2
-        ",
-    )?;
+    // pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>> {
+    // let connection = self.connection.lock().unwrap();
+    // let mut stmt = connection.prepare(
+    //     "
+    //     SELECT
+    //         id,
+    //         distance,
+    //         prompt,
+    //         compressed_prompt,
+    //         response
+    //     FROM chats
+    //     WHERE embeddings MATCH ?1
+    //     ORDER BY distance
+    //     LIMIT ?2
+    //     ",
+    // )?;
 
-    let result = stmt.query_map(
-        params![query_embeddings.as_bytes(), limit as i64], 
-        |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))  // Get the ID and similarity score
-    )?.collect::<Result<Vec<_>, _>>()?;
+    // let result = stmt.query_map(
+    //     params![query_embeddings.as_bytes(), limit as i64], 
+    //     |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))  // Get the ID and similarity score
+    // )?.collect::<Result<Vec<_>, _>>()?;
 
-    Ok(result)
-    }
+    // Ok(result)
+    // }
 
 }

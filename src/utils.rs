@@ -1,41 +1,34 @@
-use reqwest::Client;
-use std::error::Error as StdError;
-use tokio::sync::mpsc;
-use serde_json::json;
-use regex::Regex;
-use bytes::Bytes;
-use futures::stream::unfold;
-use serde_json::Value;
-use crate::request_type::RequestType;
-use dotenv::dotenv;
-use psutil::process::Process;
-use std::thread::sleep;
-use std::time::{ Duration, Instant };
 use std::env;
-use chrono::Utc;
-use actix_web::{ HttpResponse, Error };
-use log::{ debug, error };
-use sysinfo::{ System, SystemExt };
-use crate::platform_variables::get_default_prompt_template;
 use std::process;
-use futures_util::stream::TryStreamExt;
-use tokio_stream::{ wrappers::ReceiverStream, Stream };
+use bytes::Bytes;
+use std::sync::Arc;
+use dotenv::dotenv;
+use reqwest::Client;
+use serde_json::json;
+use tokio::sync::mpsc;
+use serde_json::Value;
 use futures::StreamExt;
+use log::{ debug, error };
+use futures::stream::unfold;
+use sysinfo::{ System, SystemExt };
+use std::error::Error as StdError;
 use reqwest::Error as ReqwestError;
+use crate::request_type::RequestType;
+use futures_util::stream::TryStreamExt;
+use actix_web::{ HttpResponse, Error };
+use tokio_stream::{ wrappers::ReceiverStream, Stream };
+use crate::platform_variables::get_default_prompt_template;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
-use crate::database::db_config::DB_INSTANCE;
-use std::sync::Arc;
 
-// Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
-    dotenv().ok(); // Load the .env file if it exists
+    load_env(); // Load the .env file from the specified path
     let cloud_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "false".to_string());
     cloud_mode == "true"
 }
 
 pub fn get_local_url() -> String {
-    dotenv().ok(); // Load the .env file if it exists
+    load_env(); // Load the .env file from the specified path
     env::var("LOCAL_URL").unwrap_or_else(|_| {
         eprintln!("Error: Environment variable LOCAL_URL is not set.");
         process::exit(1); // Exit the program with an error code
@@ -43,7 +36,7 @@ pub fn get_local_url() -> String {
 }
 
 pub fn get_remote_url() -> String {
-    dotenv().ok(); // Load the .env file if it exists
+    load_env(); // Load the .env file from the specified path
     env::var("REMOTE_URL").unwrap_or_else(|_| {
         eprintln!("Error: Environment variable REMOTE_URL is not set.");
         process::exit(1); // Exit the program with an error code
@@ -51,11 +44,32 @@ pub fn get_remote_url() -> String {
 }
 
 pub fn get_cloud_api_key() -> String {
-    dotenv().ok(); // Load the .env file if it exists
+    load_env(); // Load the .env file from the specified path
     env::var("CLOUD_API_KEY").unwrap_or_else(|_| {
         eprintln!("Error: Environment variable CLOUD_API_KEY is not set.");
         process::exit(1); // Exit the program with an error code
     })
+}
+
+pub fn get_llm_temperature() -> f64 {
+    load_env(); // Load the .env file from the specified path
+    env::var("TEMPERATURE")
+        .unwrap_or_else(|_| {
+            eprintln!("Error: Environment variable TEMPERATURE is not set.");
+            process::exit(1); // Exit the program with an error code
+        })
+        .parse::<f64>()
+        .unwrap_or_else(|_| {
+            eprintln!("Error: Failed to parse TEMPERATURE as a float.");
+            process::exit(1); // Exit with an error if parsing fails
+        })
+}
+// Load the environment variables from a `.env` file
+fn load_env() {
+    let current_dir =  env::current_dir().unwrap();
+    let top_dir = current_dir.parent().unwrap();
+    let dotenv_path = top_dir.join(".env");
+    dotenv::from_path(dotenv_path).ok();
 }
 
 pub async fn local_llm_response(
@@ -111,11 +125,11 @@ pub async fn local_llm_response(
 
 pub async fn remote_llm_response(
     system_prompt: &str,
-    prompt: &str,
+    _prompt: &str,
     full_user_prompt: &str,
     session_id: &str,
-    user_id: &str,
-    request_type: RequestType
+    _user_id: &str,
+    _request_type: RequestType
 ) -> Result<HttpResponse, Error> {
     match cloud_llm_response(system_prompt, full_user_prompt).await {
         Ok(stream) => {
@@ -415,14 +429,14 @@ async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
 /// Handle the end of the stream by processing accumulated content
 async fn handle_end_of_stream(
     acc: &str,
-    user_id: &Arc<String>,
-    session_id: &Arc<String>,
-    user_prompt: &Arc<String>,
-    request_type: &Arc<String>
+    _user_id: &Arc<String>,
+    _session_id: &Arc<String>,
+    _user_prompt: &Arc<String>,
+    _request_type: &Arc<String>
 ) {
     debug!("Stream has ended: {}", acc);
 
-    let result: Result<Vec<String>, anyhow::Error> = get_attention_scores(&acc).await;
+    let result= get_attention_scores(&acc).await;
     let tokens = match result {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -432,7 +446,7 @@ async fn handle_end_of_stream(
     };
 
     let embeddings_result = generate_text_embedding(acc).await;
-    let embeddings = match embeddings_result {
+    let _embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
         Err(_) => {
             return;
@@ -452,89 +466,6 @@ async fn handle_end_of_stream(
     //     request_type,
     // )
     // .await;
-}
-
-/// Store the processed content and embeddings into the database
-async fn store_in_db(
-    user_id: &Arc<String>,
-    session_id: &Arc<String>,
-    user_prompt: &Arc<String>,
-    compressed_prompt: &str,
-    acc: &str,
-    embeddings: &[f32],
-    request_type: &Arc<String>
-) {
-    DB_INSTANCE.store_chats(
-        user_id,
-        session_id,
-        user_prompt,
-        compressed_prompt,
-        acc,
-        embeddings,
-        request_type
-    );
-}
-
-pub fn calculate_cpu_usage(pid: u32, interval: Option<u64>) -> f64 {
-    // Create a new process object
-    let process = Process::new(pid).unwrap();
-
-    // First snapshot of CPU times
-    let cpu_times_1 = process.cpu_times().unwrap();
-    let time_1 = Instant::now();
-
-    // Wait for the provided interval, defaulting to 1 second if not provided
-    let interval_duration = Duration::from_secs(interval.unwrap_or(1));
-    sleep(interval_duration);
-
-    // Second snapshot of CPU times
-    let cpu_times_2 = process.cpu_times().unwrap();
-    let time_2 = Instant::now();
-
-    // Convert the elapsed time to seconds as a floating-point value
-    let elapsed_time = time_2.duration_since(time_1).as_secs_f64();
-
-    // Calculate the deltas between the CPU times
-    let user_delta = cpu_times_2.user() - cpu_times_1.user();
-    let system_delta = cpu_times_2.system() - cpu_times_1.system();
-    let total_cpu_time = user_delta + system_delta;
-
-    // Get the total number of CPUs
-    let total_cpus = psutil::cpu::cpu_count();
-
-    // Calculate the CPU usage percentage
-    let cpu_usage_percent = (total_cpu_time.div_f32(elapsed_time as f32) * 100).div_f32(
-        total_cpus as f32
-    );
-
-    cpu_usage_percent.as_secs_f64()
-}
-
-pub fn get_ram_usage(pid: u32) -> f64 {
-    // Create a new process object
-    let process = Process::new(pid).unwrap();
-
-    // Get the memory info
-    let memory_info = process.memory_info().unwrap();
-
-    // Convert the RSS (resident set size) from bytes to MB
-
-    (memory_info.rss() as f64) / 1024.0 / 1024.0
-}
-
-struct ProcessUsage {
-    pid: u32,
-    cpu_percentage: f64,
-    ram_megabytes: f64,
-}
-fn replace_multiple_spaces(text: &str) -> String {
-    let re = Regex::new(r"\s+").unwrap();
-    re.replace_all(text, " ").trim().to_string()
-}
-
-fn current_timestamp() -> i64 {
-    // Get the current UTC time and convert it to a Unix timestamp in seconds
-    Utc::now().timestamp()
 }
 
 pub fn get_total_ram() -> f64 {

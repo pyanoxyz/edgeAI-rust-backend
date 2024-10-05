@@ -1,7 +1,7 @@
 use std::fs::{self};
 use std::error::Error;
 use log::debug;
-use dirs;
+use dirs::home_dir;
 use std::path::{Path, PathBuf};
 use fastembed::{TextRerank, RerankInitOptions, RerankerModel, RerankResult};
 
@@ -12,7 +12,7 @@ pub struct RerankManager {
 impl RerankManager {
     // Constructor to create a new instance of EmbeddingsManager
     pub fn new(save_path: &str) -> Self {
-        let home_dir = dirs::home_dir().expect("Unable to get home directory");
+        let home_dir = home_dir().expect("Unable to get home directory");
         let save_path = home_dir.join(save_path);
         Self {
             save_path,

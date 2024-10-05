@@ -1,5 +1,5 @@
 [package]
-name = "pyano-server"
+name = "pyano_server"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"  # Ensure build.rs is called during build
@@ -49,3 +49,7 @@ async-trait = "0.1.83"
 thiserror = "1.0.64"
 async-stream = "0.3.5"
 dirs = "5.0.1"
+
+[dev-dependencies]
+actix-web = "4"
+
