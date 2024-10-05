@@ -10,16 +10,16 @@ use crate::request_type::RequestType;
 use dotenv::dotenv;
 use psutil::process::Process;
 use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::{ Duration, Instant };
 use std::env;
 use chrono::Utc;
-use actix_web::{HttpRequest, HttpResponse, Error};
-use log::{debug, error};
-use sysinfo::{System, SystemExt};
+use actix_web::{ HttpResponse, Error };
+use log::{ debug, error };
+use sysinfo::{ System, SystemExt };
 use crate::platform_variables::get_default_prompt_template;
 use std::process;
 use futures_util::stream::TryStreamExt;
-use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tokio_stream::{ wrappers::ReceiverStream, Stream };
 use futures::StreamExt;
 use reqwest::Error as ReqwestError;
 use crate::embeddings::text_embeddings::generate_text_embedding;
@@ -29,12 +29,10 @@ use std::sync::Arc;
 
 // Function to read the CLOUD_EXECUTION_MODE from the environment
 pub fn is_cloud_execution_mode() -> bool {
-
     dotenv().ok(); // Load the .env file if it exists
     let cloud_mode = env::var("CLOUD_EXECUTION_MODE").unwrap_or_else(|_| "false".to_string());
     cloud_mode == "true"
 }
-
 
 pub fn get_local_url() -> String {
     dotenv().ok(); // Load the .env file if it exists
@@ -52,7 +50,6 @@ pub fn get_remote_url() -> String {
     })
 }
 
-
 pub fn get_cloud_api_key() -> String {
     dotenv().ok(); // Load the .env file if it exists
     env::var("CLOUD_API_KEY").unwrap_or_else(|_| {
@@ -67,45 +64,49 @@ pub async fn local_llm_response(
     full_user_prompt: &str,
     session_id: &str,
     user_id: &str,
-    request_type: RequestType,
+    request_type: RequestType
 ) -> Result<HttpResponse, Error> {
-
-    match local_llm_request(system_prompt,
-        full_user_prompt, 
-        0.2).await {
-            Ok(stream) => {
+    match local_llm_request(system_prompt, full_user_prompt, 0.2).await {
+        Ok(stream) => {
             let prompt_owned = Arc::new(prompt.to_owned());
             let session_id_owned = Arc::new(session_id.to_owned());
             let user_id_owned = Arc::new(user_id.to_owned());
-            let request_type_owned = Arc::new(request_type.to_string().to_owned());  // Here, `request_type` is moved
+            let request_type_owned = Arc::new(request_type.to_string().to_owned()); // Here, `request_type` is moved
 
-        // Clone request_type if you need to use it later
-        // let request_type_clone = request_type.clone();
+            // Clone request_type if you need to use it later
+            // let request_type_clone = request_type.clone();
 
-        let formatted_stream = format_local_llm_response(
+            let formatted_stream = format_local_llm_response(
                 stream,
-        prompt_owned.clone(), // Clone Arc for shared ownership
-            session_id_owned.clone(),
-            user_id_owned.clone(),
-            request_type_owned.clone()
+                prompt_owned.clone(), // Clone Arc for shared ownership
+                session_id_owned.clone(),
+                user_id_owned.clone(),
+                request_type_owned.clone()
             ).await;
 
-        let response = HttpResponse::Ok()
-            .append_header(("X-Session-ID", session_id.to_string()))
-            .streaming(formatted_stream);
-        Ok(response)
-        
+            let response = HttpResponse::Ok()
+                .append_header(("X-Session-ID", session_id.to_string()))
+                .streaming(formatted_stream);
+            Ok(response)
         }
-        
+
         Err(e) => {
-            error!("Local llm being executed with session_id {} and user_id {} {}", session_id, user_id, e);
+            error!(
+                "Local llm being executed with session_id {} and user_id {} {}",
+                session_id,
+                user_id,
+                e
+            );
 
-        Err(actix_web::error::ErrorInternalServerError(json!({
+            Err(
+                actix_web::error::ErrorInternalServerError(
+                    json!({
             "error": e.to_string()
-        })))
+        })
+                )
+            )
         }
-}
-
+    }
 }
 
 pub async fn remote_llm_response(
@@ -114,7 +115,7 @@ pub async fn remote_llm_response(
     full_user_prompt: &str,
     session_id: &str,
     user_id: &str,
-    request_type: RequestType,
+    request_type: RequestType
 ) -> Result<HttpResponse, Error> {
     match cloud_llm_response(system_prompt, full_user_prompt).await {
         Ok(stream) => {
@@ -124,42 +125,45 @@ pub async fn remote_llm_response(
             Ok(response)
         }
         Err(e) => {
-            Err(actix_web::error::ErrorInternalServerError(json!({
+            Err(
+                actix_web::error::ErrorInternalServerError(
+                    json!({
                 "error": e.to_string()
-            })))
+            })
+                )
+            )
         }
     }
 }
 
-
 async fn local_llm_request(
     system_prompt: &str,
     full_user_prompt: &str,
-    temperature: f64,
-
+    temperature: f64
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
     let client = Client::new();
     let default_prompt_template = get_default_prompt_template();
-    
+
     //This makes the full prompt by taking the default_prompt_template that
     //depends on the LLM being used
     let full_prompt = default_prompt_template
         .replace("{system_prompt}", system_prompt)
         .replace("{user_prompt}", full_user_prompt);
 
-    let llm_server_url =  get_local_url();
+    let llm_server_url = get_local_url();
     debug!("{}", full_prompt);
 
     let resp = client
-        .post(format!("{}/completions",  llm_server_url))
-        .json(&json!({
+        .post(format!("{}/completions", llm_server_url))
+        .json(
+            &json!({
             "prompt": full_prompt,
             "stream": true,
             "temperature": temperature,
             "cache_prompt": true
-        }))
-        .send()
-        .await?
+        })
+        )
+        .send().await?
         .error_for_status()?; // Handle HTTP errors automatically
 
     // Create a channel for streaming the response
@@ -167,14 +171,14 @@ async fn local_llm_request(
 
     tokio::spawn(async move {
         let mut stream = resp.bytes_stream();
-    
+
         while let Ok(Some(bytes)) = stream.try_next().await {
             if tx.send(Ok(bytes)).await.is_err() {
                 eprintln!("Receiver dropped");
                 break;
             }
         }
-    
+
         if let Err(e) = stream.try_next().await {
             let _ = tx.send(Err(e)).await;
         }
@@ -184,16 +188,16 @@ async fn local_llm_request(
     Ok(ReceiverStream::new(rx))
 }
 
-
 async fn cloud_llm_response(
     system_prompt: &str,
-    full_user_prompt: &str,
+    full_user_prompt: &str
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError>> {
-    let api_url =  get_remote_url();
+    let api_url = get_remote_url();
 
     let api_key = get_cloud_api_key();
     // Prepare the dynamic JSON body for the request
-    let request_body = json!({
+    let request_body =
+        json!({
         "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "messages": [
             {
@@ -216,9 +220,8 @@ async fn cloud_llm_response(
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&request_body)
-        .send()
-        .await?
-        .error_for_status()?;  // Handle any HTTP errors automatically
+        .send().await?
+        .error_for_status()?; // Handle any HTTP errors automatically
 
     // Create a channel for streaming the response
     let (tx, rx) = mpsc::channel(100);
@@ -304,7 +307,7 @@ async fn cloud_llm_response(
 //                     }
 //                     };
 //                     let embeddings_result = generate_text_embedding(&acc).await;
-                    
+
 //                     // Extract embeddings if the result is Ok, otherwise return None
 //                     let embeddings = match embeddings_result {
 //                         Ok(embeddings) => embeddings,
@@ -315,11 +318,11 @@ async fn cloud_llm_response(
 //                     debug!("Compressed Prompt {:?}", compressed_prompt);
 
 //                     DB_INSTANCE.store_chats(
-//                         &user_id_cloned, 
-//                         &session_id_cloned, 
-//                         &user_prompt_cloned, 
-//                         &compressed_prompt, 
-//                         &acc, 
+//                         &user_id_cloned,
+//                         &session_id_cloned,
+//                         &user_prompt_cloned,
+//                         &compressed_prompt,
+//                         &acc,
 //                         &embeddings[..],
 //                         &request_type_cloned
 //                     );
@@ -335,10 +338,10 @@ async fn cloud_llm_response(
 
 pub async fn format_local_llm_response(
     stream: impl Stream<Item = Result<Bytes, ReqwestError>> + Unpin,
-    user_prompt: Arc<String>,    // Wrapped in Arc for shared ownership
-    session_id: Arc<String>,     // Wrapped in Arc
+    user_prompt: Arc<String>, // Wrapped in Arc for shared ownership
+    session_id: Arc<String>, // Wrapped in Arc
     user_id: Arc<String>,
-    request_type: Arc<String>    // Wrapped in Arc
+    request_type: Arc<String> // Wrapped in Arc
 ) -> impl Stream<Item = Result<Bytes, ReqwestError>> {
     let accumulated_content = String::new();
 
@@ -353,7 +356,10 @@ pub async fn format_local_llm_response(
                 match chunk_result {
                     Ok(chunk) => {
                         if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                            let (new_acc, content_to_stream) = process_chunk(&chunk_str, &acc).await;
+                            let (new_acc, content_to_stream) = process_chunk(
+                                &chunk_str,
+                                &acc
+                            ).await;
 
                             acc = new_acc;
                             if !content_to_stream.is_empty() {
@@ -376,9 +382,8 @@ pub async fn format_local_llm_response(
                         &user_id_cloned,
                         &session_id_cloned,
                         &user_prompt_cloned,
-                        &request_type_cloned,
-                    )
-                    .await;
+                        &request_type_cloned
+                    ).await;
                 }
                 return None;
             }
@@ -397,8 +402,8 @@ async fn process_chunk(chunk_str: &str, acc: &str) -> (String, String) {
         if line.starts_with("data: ") {
             if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
                 if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
-                    accumulated_content.push_str(content);  // Accumulate content
-                    content_to_stream.push_str(content);    // Stream content
+                    accumulated_content.push_str(content); // Accumulate content
+                    content_to_stream.push_str(content); // Stream content
                 }
             }
         }
@@ -413,7 +418,7 @@ async fn handle_end_of_stream(
     user_id: &Arc<String>,
     session_id: &Arc<String>,
     user_prompt: &Arc<String>,
-    request_type: &Arc<String>,
+    request_type: &Arc<String>
 ) {
     debug!("Stream has ended: {}", acc);
 
@@ -429,22 +434,24 @@ async fn handle_end_of_stream(
     let embeddings_result = generate_text_embedding(acc).await;
     let embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
-        Err(_) => return,
+        Err(_) => {
+            return;
+        }
     };
 
     let compressed_prompt = tokens.join(" ");
     debug!("Compressed Prompt {:?}", compressed_prompt);
 
-    store_in_db(
-        user_id,
-        session_id,
-        user_prompt,
-        &compressed_prompt,
-        acc,
-        embeddings.as_slice(),
-        request_type,
-    )
-    .await;
+    // store_in_db(
+    //     user_id,
+    //     session_id,
+    //     user_prompt,
+    //     &compressed_prompt,
+    //     acc,
+    //     embeddings.as_slice(),
+    //     request_type,
+    // )
+    // .await;
 }
 
 /// Store the processed content and embeddings into the database
@@ -455,7 +462,7 @@ async fn store_in_db(
     compressed_prompt: &str,
     acc: &str,
     embeddings: &[f32],
-    request_type: &Arc<String>,
+    request_type: &Arc<String>
 ) {
     DB_INSTANCE.store_chats(
         user_id,
@@ -464,7 +471,7 @@ async fn store_in_db(
         compressed_prompt,
         acc,
         embeddings,
-        request_type,
+        request_type
     );
 }
 
@@ -496,7 +503,9 @@ pub fn calculate_cpu_usage(pid: u32, interval: Option<u64>) -> f64 {
     let total_cpus = psutil::cpu::cpu_count();
 
     // Calculate the CPU usage percentage
-    let cpu_usage_percent = ((total_cpu_time.div_f32(elapsed_time as f32)) * 100).div_f32(total_cpus as f32);
+    let cpu_usage_percent = (total_cpu_time.div_f32(elapsed_time as f32) * 100).div_f32(
+        total_cpus as f32
+    );
 
     cpu_usage_percent.as_secs_f64()
 }
@@ -509,9 +518,8 @@ pub fn get_ram_usage(pid: u32) -> f64 {
     let memory_info = process.memory_info().unwrap();
 
     // Convert the RSS (resident set size) from bytes to MB
-    
 
-    memory_info.rss() as f64 / 1024.0 / 1024.0
+    (memory_info.rss() as f64) / 1024.0 / 1024.0
 }
 
 struct ProcessUsage {
@@ -524,14 +532,12 @@ fn replace_multiple_spaces(text: &str) -> String {
     re.replace_all(text, " ").trim().to_string()
 }
 
-
 fn current_timestamp() -> i64 {
     // Get the current UTC time and convert it to a Unix timestamp in seconds
     Utc::now().timestamp()
 }
 
-
-pub fn get_total_ram() -> f64{
+pub fn get_total_ram() -> f64 {
     // Create a new System instance
     let mut system = System::new_all();
 
@@ -542,6 +548,6 @@ pub fn get_total_ram() -> f64{
     let total_memory = system.total_memory();
 
     // Convert to megabytes (optional)
-    let total_memory_gb = total_memory as f64 / (1024.0 * 1024.0);
+    let total_memory_gb = (total_memory as f64) / (1024.0 * 1024.0);
     total_memory_gb
 }

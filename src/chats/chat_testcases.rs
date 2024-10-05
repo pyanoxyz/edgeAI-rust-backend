@@ -1,6 +1,6 @@
-use actix_web::{post, web, HttpRequest, HttpResponse, Error};
-use crate::chats::chat_struct::{RefactorPrompt, handle_request};
-use serde::{Deserialize, Serialize};
+use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
+use crate::chats::chat_struct::{ RefactorPrompt, handle_request };
+use serde::{ Deserialize, Serialize };
 use crate::request_type::RequestType;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -9,7 +9,8 @@ pub struct ChatRequest {
     pub session_id: Option<String>,
 }
 
-const SYSTEM_PROMPT: &str = r#"
+const SYSTEM_PROMPT: &str =
+    r#"
     You are an expert software tester. Create a comprehensive test suite for the given code snippet or function. Follow this process:
         1. Analyze the code:
             - Identify the programming language and appropriate testing framework.
@@ -43,26 +44,44 @@ const SYSTEM_PROMPT: &str = r#"
         [Concise explanation of key test cases and testing approach]
         REFLECTION:
         [Brief reflection on test coverage, challenges, and potential improvements]
-        Use appropriate language identifier with triple backticks for code formatting. Prioritize clarity and comprehensiveness in your test suite.
+        
+        Ensure each section is clear and precise, focusing on improvements and efficiency.
+        Prioritize clarity and comprehensiveness in your test suite.
+
+        For formatting:
+        - Use Gfm if necessary
+        - Use proper tabs spaces and indentation.
+        - Use single-line code blocks with `<code here>`.
+        - Use comments syntax of the programming language for comments in code blocks.
+        - Use multi-line blocks with:
+        ```<language>
+        <code here>
+        ```
     "#;
 
-const USER_PROMPT_TEMPLATE: &str = r#"
+const USER_PROMPT_TEMPLATE: &str =
+    r#"
         Context from prior conversations and uploaded files: {context}
         New question or coding request: {user_prompt}
         Response should follow instruction-tuning principles.
     "#;
-
 
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(chat_testcases); // Register the correct route handler
 }
 
 #[post("/chat/tests-cases")]
-pub async fn chat_testcases(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let prompt = RefactorPrompt::new(
-        SYSTEM_PROMPT,
-        USER_PROMPT_TEMPLATE,
-    );
+pub async fn chat_testcases(
+    data: web::Json<ChatRequest>,
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    let prompt = RefactorPrompt::new(SYSTEM_PROMPT, USER_PROMPT_TEMPLATE);
 
-    handle_request(&prompt, &data.prompt, data.session_id.clone(), Some(req), RequestType::TestCases).await
+    handle_request(
+        &prompt,
+        &data.prompt,
+        data.session_id.clone(),
+        Some(req),
+        RequestType::TestCases
+    ).await
 }

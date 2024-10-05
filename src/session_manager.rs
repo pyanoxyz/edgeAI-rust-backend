@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 use uuid::Uuid;
 use once_cell::sync::Lazy;
 
@@ -61,15 +61,21 @@ impl SessionManager {
 }
 // Function to check session ID
 
-pub fn check_session(session_id: Option<String>) -> Result<String, actix_web::Error> {
+pub fn check_session(
+    session_id: Option<String>
+) -> Result<String, actix_web::Error> {
     let session_manager = SessionManager::get_instance();
 
     match session_id {
+        Some(id) if id.is_empty() => {
+            // Check for empty string
+            let new_session = session_manager.create_new_session();
+            Ok(new_session.id)
+        }
         Some(id) => Ok(id),
         None => {
             // Attempt to create a new session, return an error if it fails
-            let new_session = session_manager
-                .create_new_session();
+            let new_session = session_manager.create_new_session();
             Ok(new_session.id)
         }
     }

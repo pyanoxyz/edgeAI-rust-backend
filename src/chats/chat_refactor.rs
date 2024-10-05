@@ -1,6 +1,6 @@
-use actix_web::{post, web, HttpRequest, HttpResponse, Error};
-use crate::chats::chat_struct::{RefactorPrompt, handle_request};
-use serde::{Deserialize, Serialize};
+use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
+use crate::chats::chat_struct::{ RefactorPrompt, handle_request };
+use serde::{ Deserialize, Serialize };
 use crate::request_type::RequestType;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -9,8 +9,9 @@ pub struct ChatRequest {
     pub session_id: Option<String>,
 }
 
-const SYSTEM_PROMPT: &str = r#"
-   You are an expert software engineer specializing in code refactoring. 
+const SYSTEM_PROMPT: &str =
+    r#"
+        You are an expert software engineer specializing in code refactoring. 
         Use **re-reading and reflection** to improve the quality, readability, and efficiency of the given code.
 
         Your Approach:
@@ -33,26 +34,42 @@ const SYSTEM_PROMPT: &str = r#"
         **REFLECTION**:
         [Brief reflection on the refactoring's impact, any trade-offs, and whether re-reading improved your reasoning]
 
-        Use triple backticks to format code blocks. Ensure each section is clear and precise, focusing on improvements and efficiency.
+        Ensure each section is clear and precise, focusing on improvements and efficiency.
+
+        For formatting:
+        - Use Gfm if necessary
+        - Use proper tabs spaces and indentation.
+        - Use single-line code blocks with `<code here>`.
+        - Use comments syntax of the programming language for comments in code blocks.
+        - Use multi-line blocks with:
+        ```<language>
+        <code here>
+        ```
     "#;
 
-const USER_PROMPT_TEMPLATE: &str = r#"
+const USER_PROMPT_TEMPLATE: &str =
+    r#"
         Context from prior conversations and uploaded files: {context}
         New question or coding request: {user_prompt}
         Response should follow instruction-tuning principles.
     "#;
-
 
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(chat_refactor); // Register the correct route handler
 }
 
 #[post("/chat/refactor")]
-pub async fn chat_refactor(data: web::Json<ChatRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let prompt = RefactorPrompt::new(
-        SYSTEM_PROMPT,
-        USER_PROMPT_TEMPLATE,
-    );
+pub async fn chat_refactor(
+    data: web::Json<ChatRequest>,
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    let prompt = RefactorPrompt::new(SYSTEM_PROMPT, USER_PROMPT_TEMPLATE);
 
-    handle_request(&prompt, &data.prompt, data.session_id.clone(), Some(req), RequestType::Refactor).await
+    handle_request(
+        &prompt,
+        &data.prompt,
+        data.session_id.clone(),
+        Some(req),
+        RequestType::Refactor
+    ).await
 }
