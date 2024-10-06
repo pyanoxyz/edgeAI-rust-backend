@@ -1,7 +1,7 @@
 use actix_web::{test, App};
-use pyano_server::chats::chat::{chat, ChatRequest}; // Replace `my_crate` with your crate name
+use crate::chats::chat::{chat, ChatRequest}; // Replace `my_crate` with your crate name
 
-#[actix_web::test]
+#[test]
 async fn test_chat_endpoint() {
     let mut app = test::init_service(
         App::new().service(chat)

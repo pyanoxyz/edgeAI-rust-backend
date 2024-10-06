@@ -1,7 +1,7 @@
 use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
 use crate::llm_stream::handle::stream_to_chat_client;
 use serde::{ Deserialize, Serialize };
-use crate::request_type::RequestType;
+use super::chat_types::RequestType;
 use std::sync::{Arc, Mutex};
 use crate::session_manager::check_session;
 use serde_json::json;

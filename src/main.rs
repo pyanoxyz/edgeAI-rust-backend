@@ -13,7 +13,6 @@ mod chats; // Import the chats module
 mod authentication;
 mod utils;
 mod session_manager;
-mod request_type;
 mod platform_variables;
 mod database;
 mod embeddings;

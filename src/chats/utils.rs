@@ -1,6 +1,6 @@
 
 use std::sync::{Arc, Mutex};
-use crate::request_type::RequestType;
+use super::chat_types::RequestType;
 use log::{error, debug};
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;

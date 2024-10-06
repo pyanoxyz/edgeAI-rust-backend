@@ -1,0 +1,75 @@
+{
+    "8": {
+      "model_name": "Llama-3.2-3B-Instruct-Q6_K_L.gguf",
+      "model_url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q6_K_L.gguf",
+      "model_size": 2.74,
+      "ctx_size": 8192,
+      "gpu_layers_offloading": 12,
+      "batch_size": 1024,
+      "keep_model_in_memory": false,
+      "mmap": false
+    },
+    "16": {
+      "model_name": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+      "model_url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+      "model_size": 8.1,
+      "ctx_size": 32768,
+      "gpu_layers_offloading": -1,
+      "batch_size": 4096,
+      "keep_model_in_memory": false,
+      "mmap": false
+    },
+    "24": {
+      "model_name": "Qwen2.5-14B-Instruct-Q6_K_L.gguf",
+      "model_url": "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q6_K_L.gguf",
+      "model_size": 12.5,
+      "ctx_size": 32768,
+      "gpu_layers_offloading": 16,
+      "batch_size": 8192,
+      "keep_model_in_memory": false,
+      "mmap": false
+    },
+    "32": {
+      "model_name": "Qwen2.5-32B-Instruct-Q4_0.gguf",
+      "model_url": "https://huggingface.co/bartowski/Qwen2.5-32B-Instruct-GGUF/resolve/main/Qwen2.5-32B-Instruct-Q4_0.gguf",
+      "model_size": 18.7,
+      "ctx_size": 65536,
+      "gpu_layers_offloading": -1,
+      "batch_size": 16384,
+      "keep_model_in_memory": true,
+      "mmap": false
+    },
+    "48": {
+        "model_name": "Qwen2.5-32B-Instruct-Q6_K_L.gguf",
+        "model_url": "https://huggingface.co/bartowski/Qwen2.5-32B-Instruct-GGUF/resolve/main/Qwen2.5-32B-Instruct-Q6_K_L.gguf",
+        "model_size": 27.3,
+        "ctx_size": 65536,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16384,
+        "keep_model_in_memory": true,
+        "mmap": false
+    },
+    "64": {
+        "model_name": "Hermes-3-Llama-3.1-70B.Q3_K_L.gguf",
+        "model_url": "https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-70B-GGUF/resolve/main/Hermes-3-Llama-3.1-70B.Q3_K_L.gguf",
+        "model_size": 37.1,
+        "ctx_size": 128000,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16384,
+        "keep_model_in_memory": true,
+        "mmap": false
+    }, 
+    "96": {
+        "model_name": "Hermes-3-Llama-3.1-70B.Q3_K_L.gguf",
+        "model_url": "https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-70B-GGUF/resolve/main/Hermes-3-Llama-3.1-70B.Q3_K_L.gguf",
+        "model_size": 37.1,
+        "ctx_size": 128000,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16384,
+        "keep_model_in_memory": true,
+        "mmap": false
+    }
+
+
+  }
+  

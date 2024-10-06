@@ -25,12 +25,5 @@ impl RequestType {
 
         }
     }
-    // pub fn to_string(&self) -> String {
-    //     match self {
-    //         RequestType::Infill => "Text".to_string(),
-    //         RequestType::Chat => "Chat".to_string(),
-    //         RequestType::Refactor => "Refactor".to_string(),
-    //         RequestType::TestCases => "TestCases".to_string(),
-    //     }
-    // }
+
 }
