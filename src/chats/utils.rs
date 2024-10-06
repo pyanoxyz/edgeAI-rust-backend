@@ -5,6 +5,8 @@ use log::{error, debug};
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
 use crate::database::db_config::DB_INSTANCE;
+use std::time::{Duration, Instant};
+use std::future::Future;
 
 pub async fn handle_stream_completion(
     rx: tokio::sync::oneshot::Receiver<()>,
@@ -15,8 +17,12 @@ pub async fn handle_stream_completion(
 ) {
     if let Ok(_) = rx.await {
         let accumulated_content_final = accumulated_content.lock().unwrap().clone();
+        // let summary = summarize_text(&accumulated_content_final).await.unwrap();
 
-        let result = get_attention_scores(&accumulated_content_final).await;
+        // let result = get_attention_scores(&accumulated_content_final).await;
+        let (result, duration) = measure_time_async(||  get_attention_scores(&accumulated_content_final)).await;
+
+
         let tokens = match result {
             Ok(tokens) => tokens,
             Err(e) => {
@@ -24,8 +30,10 @@ pub async fn handle_stream_completion(
                 return;
             }
         };
+        debug!("Time elapsed in compressing result {:?}", duration);
+        // let embeddings_result = generate_text_embedding(&accumulated_content_final).await;
+        let (embeddings_result, duration) = measure_time_async(|| generate_text_embedding(&accumulated_content_final)).await;
 
-        let embeddings_result = generate_text_embedding(&accumulated_content_final).await;
         let embeddings = match embeddings_result {
             Ok(embeddings_value) => embeddings_value,
             Err(_) => {
@@ -33,10 +41,9 @@ pub async fn handle_stream_completion(
                 return;
             }
         };
+        debug!("Time elapsed in generating embeddings {:?}", duration);
 
         let compressed_prompt = tokens.join(" ");
-        debug!("Compressed Prompt {:?}", compressed_prompt);
-        println!("Final accumulated content: {}", accumulated_content_final);
 
         let session_id = match ts_session_id.lock() {
             Ok(locked_session_id) => locked_session_id.clone(),
@@ -54,6 +61,7 @@ pub async fn handle_stream_completion(
             }
         };
 
+        
         let db_response = DB_INSTANCE.store_chats(
             "user_id",
             &session_id,
@@ -79,4 +87,28 @@ pub async fn handle_stream_completion(
             }
         }
     }
+}
+
+
+
+/// Measures the time taken to execute an asynchronous function.
+///
+/// # Arguments
+///
+/// * `func` - A closure or function that returns a `Future` when called.
+///
+/// # Returns
+///
+/// A `Future` that, when awaited, yields a tuple containing:
+/// - The result of the asynchronous function execution.
+/// - The `Duration` representing the time taken to execute the function.
+pub async fn measure_time_async<T, F, Fut>(func: F) -> (T, Duration)
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let start = Instant::now();
+    let result = func().await;
+    let duration = start.elapsed();
+    (result, duration)
 }
