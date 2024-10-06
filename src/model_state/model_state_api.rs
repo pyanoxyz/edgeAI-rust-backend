@@ -8,13 +8,15 @@ use serde::Deserialize;
 use tokio::time::{ sleep, Duration, Instant }; // Import sleep and Duration from tokio
 use tokio::process::Command;
 use crate::model_state::state::ModelState;
+use crate::database::db_config::DB_INSTANCE;
 
 pub fn model_state_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(mode_state)
         .service(run_model)
         .service(kill_model)
         .service(restart_model)
-        .service(get_model_usage);
+        .service(get_model_usage)
+        .service(model_config);
 }
 
 #[get("/model-state")]
@@ -89,6 +91,27 @@ async fn run_model(
 
     Ok(HttpResponse::Ok().json(json!({"message": "Model started"})))
 }
+
+#[get("/model-config")]
+async fn model_config() -> Result<HttpResponse, Error> {
+    // Use into_inner to get the inner String from the Path extractors
+
+
+    // Return the result as JSON
+    match DB_INSTANCE.get_model_config() {
+        Ok(config) => {
+            // If successful, return the configuration as JSON
+            Ok(HttpResponse::Ok().json(config))
+        }
+        Err(e) => {
+            // If there's an error, return a proper error message
+            // Log the error or send a more descriptive message if needed
+            Ok(HttpResponse::InternalServerError().body(format!("Error fetching config: {}", e)))
+        }
+    }
+}
+
+
 
 #[get("/kill-model")]
 async fn kill_model(

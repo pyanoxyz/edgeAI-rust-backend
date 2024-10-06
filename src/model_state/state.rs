@@ -1,20 +1,21 @@
 use tokio::sync::Mutex as TokioMutex; // Import tokio's async mutex
 use std::sync::{ Arc, Mutex };
 use tokio::task::JoinHandle;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ConfigSection {
     pub model_name: String,
     pub model_url: String,
     pub model_size: f64,
+    pub system_prompt: String,
     pub ctx_size: u32,
     pub gpu_layers_offloading: i32,
     pub batch_size: u32,
-    pub keep_model_in_memory: bool,
+    pub mlock: bool,
     pub mmap: bool,
 }
 

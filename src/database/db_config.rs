@@ -8,7 +8,8 @@ use rusqlite::{ffi::sqlite3_auto_extension, Connection};
 
 pub struct DBConfig {
     pub connection: Mutex<Connection>,  // Wrapping the connection in Mutex for thread-safe access
-    pub pair_programmer_connection: Mutex<Connection>
+    pub pair_programmer_connection: Mutex<Connection>,
+    pub common_connection: Mutex<Connection>
 }
 
 impl DBConfig {
@@ -22,6 +23,8 @@ impl DBConfig {
         }
         let pyano_db_file = pyano_data_dir.join("chats.db");
         let pair_programmer_db_file = pyano_data_dir.join("pair_programmer.db");
+        let common_db_file = pyano_data_dir.join("common.db");
+        
 
         // Register the sqlite-vec extension to support vector operations
         unsafe {
@@ -29,11 +32,12 @@ impl DBConfig {
         }        
         let connection: Connection = Connection::open(&pyano_db_file).unwrap();
         let pair_programmer_connection: Connection = Connection::open(&pair_programmer_db_file).unwrap();
-
+        let common_connection = Connection::open(&common_db_file).unwrap();
 
         let db_config = DBConfig {
             connection: Mutex::new(connection),  // Wrapping the connection
-            pair_programmer_connection: Mutex::new(pair_programmer_connection)
+            pair_programmer_connection: Mutex::new(pair_programmer_connection),
+            common_connection: Mutex::new(common_connection)
         };
 
         db_config.create_chat_table();
@@ -43,9 +47,32 @@ impl DBConfig {
         db_config.create_context_embeddings();
         db_config.create_pair_programmer_steps_table();
         db_config.create_pair_programmer_table();
+        db_config.create_config_table();
         db_config
     }
     
+    pub fn create_config_table(&self){
+        let connection = self.common_connection.lock().unwrap();
+        info!("Checking for <config> Table in common connection");
+        connection.execute(
+            "
+            CREATE TABLE IF NOT EXISTS config (
+                id TEXT PRIMARY KEY,  -- UUID as primary key
+                model_name TEXT NOT NULL,
+                model_url TEXT NOT NULL,
+                model_size INTEGER,
+                ctx_size INTEGER,
+                gpu_layers_offloading INTEGER,
+                batch_size INTEGER,
+                mlock INTEGER,
+                nmap INTEGER,
+                system_prompt TEXT
+            );
+            ",
+            [],  // Empty array for parameters since none are needed
+        ).unwrap();
+    }
+
     pub fn create_chat_table(&self){
         let connection = self.connection.lock().unwrap();
         info!("Checking for <chats> Table");

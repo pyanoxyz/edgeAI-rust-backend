@@ -136,14 +136,14 @@ pub fn download_and_save_model(save_path: &str) -> Result<()> {
 pub async fn summarize_text(text: &str) -> Result<String> {
     let home_dir = home_dir().expect("Failed to retrieve home directory");
     let summarization_dir = home_dir.join(".pyano/models/summarization_model");    // Spawn a new thread for downloading the model and initialization
-           // Ensure the model directory exists
-           create_dir_all(&summarization_dir).expect("Failed to create model directory");
+    // Ensure the model directory exists
+    create_dir_all(&summarization_dir).expect("Failed to create model directory");
 
-           // Ensure the model is downloaded
-           let summarization_dir_str = summarization_dir
-               .to_str()
-               .expect("Failed to convert PathBuf to str")
-               .to_string();
+    // Ensure the model is downloaded
+    let summarization_dir_str = summarization_dir
+        .to_str()
+        .expect("Failed to convert PathBuf to str")
+        .to_string();
     let text_clone = text.to_owned();
     debug!("Text for sumamrization is {}", text_clone);
 

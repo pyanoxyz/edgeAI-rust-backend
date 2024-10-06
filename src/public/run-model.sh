@@ -17,7 +17,7 @@ MODEL_URL="${MODEL_URL:-default_model_url}"
 CTX="${CTX_SIZE:-default_ctx_size}"
 GPU_LAYERS_OFFLOADED="${GPU_LAYERS_OFFLOADING:-default_gpu_layers}"
 BATCH_SIZE="${BATCH_SIZE:-default_batch_size}"
-KEEP_MODEL_IN_MEMORY="${KEEP_MODEL_IN_MEMORY:-true}"
+MLOCK="${MLOCK:-true}"
 MMAP="${MMAP:-false}"
 
 
@@ -154,7 +154,7 @@ $BUILD_DIR/llama-server \
     --metrics \
     --batch-size "$BATCH_SIZE" \
     $( [ "$MMAP" == "true" ] && echo "--mmap" || echo "--no-mmap" ) \
-    $( [ "$KEEP_MODEL_IN_MEMORY" == "true" ] && echo "--mlock" ) \
+    $( [ "$MLOCK" == "true" ] && echo "--mlock" ) \
     --conversation \
     --flash-attn \
     --cache-type-k f16 \

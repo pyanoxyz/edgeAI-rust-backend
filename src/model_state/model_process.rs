@@ -8,6 +8,7 @@ use dirs::home_dir;
 use std::fs::create_dir_all;
 use std::fs;
 use std::process::Command;
+use crate::database::db_config::DB_INSTANCE;
 
 fn get_system_ram_gb() -> u64 {
     #[cfg(target_os = "linux")]
@@ -137,8 +138,8 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
             )
             .env("BATCH_SIZE", selected_config.batch_size.to_string())
             .env(
-                "KEEP_MODEL_IN_MEMORY",
-                selected_config.keep_model_in_memory.to_string(),
+                "MLOCK",
+                selected_config.mlock.to_string(),
             )
             .env("MMAP", selected_config.mmap.to_string())
             .stdout(std::process::Stdio::piped()) // Capture stdout
@@ -147,6 +148,7 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
     {
         Ok(child) => {
             println!("Model process started successfully.");
+            DB_INSTANCE.update_model_config(selected_config);
             child
         }
         Err(e) => {
