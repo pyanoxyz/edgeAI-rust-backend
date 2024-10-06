@@ -45,6 +45,16 @@ fn get_system_ram_gb() -> u64 {
     }
 }
 
+
+//If the system's available RAM is 84 GB, the function select_config_section will iterate over the keys 
+//in the provided config object to find the largest key that is less than or equal to the system's RAM.
+//Here's a breakdown of the logic:
+//It collects all keys from the config (in your case, "8", "16", "24", "32", "48", "64", "96") and 
+//converts them to integers: 8, 16, 24, 32, 48, 64, 96.
+//These keys are sorted in ascending order.
+//The function iterates over the sorted keys, finding the largest one that is less than or equal to 84 GB.
+//The largest key less than or equal to 84 is 64 (since 96 is greater than 84).
+//Therefore, the selected_config will be the configuration with the key "64", 
 fn select_config_section(config: &HashMap<String, ConfigSection>) -> &ConfigSection {
     let ram_gb = get_system_ram_gb();
     println!("System RAM: {} GB", ram_gb);
@@ -94,18 +104,25 @@ pub async fn kill_model_process(parent_pid: u32) -> Result<(), std::io::Error> {
 
 // Function that starts the model process and takes a callback for the parent PID
 pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Send + 'static {
+    // Retrieves the user's home directory or exits if it fails
     let home_dir = home_dir().expect("Failed to retrieve home directory");
+    
+    // Constructs the path to the `.pyano/configs` directory inside the home directory
     let config_dir = home_dir.join(".pyano/configs");    // Spawn a new thread for downloading the model and initialization
-    // Ensure the model directory exists
+    
+    // Ensures that the model directory exists by creating all directories in the path if they don't exist
     create_dir_all(&config_dir).expect("Failed to create config directory");
+
+    // Joins the directory path with `model_config.json` to create the full path to the config file
     let config_file = config_dir.join("model_config.json");
 
-    // Ensure the model is downloaded
+    // Converts the `PathBuf` (config file path) into a string representation for further use
     let config_file_str = config_file
         .to_str()
         .expect("Failed to convert PathBuf to str")
         .to_string();
 
+    // Attempts to read the content of the config file and handle potential errors
     let config_data = match fs::read_to_string(config_file_str){
         Ok(result) => result,
         Err(err) => {
@@ -114,18 +131,23 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
         }
     };
 
+    // Parses the JSON content of the config file into a HashMap of String keys and ConfigSection values
     let config: HashMap<String, ConfigSection> = serde_json::from_str(&config_data)
     .expect("JSON was not well-formatted");
 
-    // Select the appropriate config section
+    // Selects the appropriate config section based on system RAM and available options in the config
     let selected_config = select_config_section(&config);
 
-    println!("Selected Configuration: {:?}", selected_config);
 
-    // Make sure the callback is FnOnce, accepts Option<u32>, and is Send
+    // Retrieves the current working directory of the process
     let project_root = env::current_dir().unwrap();
+    
+    // Joins the current directory with the relative path to the script that will run the model
+    //this is the shell script that containes the logic to run the model with llama-cpp and serves
+    // the model on a http server
     let script_path = project_root.join("src/public/run-model.sh");
 
+    // Spawns a new child process to run the shell script using `bash`, passing environment variables from the selected config
     let mut child = match
     tokio_command::new("bash")
             .arg(script_path)
@@ -184,57 +206,3 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
         }
     }
 }
-
-
-
-// // Function that starts the model process and takes a callback for the parent PID
-// pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Send + 'static {
-//     // Make sure the callback is FnOnce, accepts Option<u32>, and is Send
-//     let project_root = env::current_dir().unwrap();
-//     let script_path = project_root.join("src/public/run-model.sh");
-
-//     let mut child = match
-//         Command::new("sh")
-//             .arg(script_path) // Path to your llama.cpp script
-//             .stdout(std::process::Stdio::piped()) // Capture stdout
-//             .stderr(std::process::Stdio::piped()) // Capture stderr
-//             .spawn()
-//     {
-//         Ok(child) => {
-//             println!("Model process started successfully.");
-//             child
-//         }
-//         Err(e) => {
-//             eprintln!("Failed to start model process: {}", e);
-//             return; // Exit if process can't be started
-//         }
-//     };
-
-//     debug!("Starting model");
-//     let pid = child.id();
-
-//     debug!("Model process ID: {}", pid.unwrap());
-//     callback(pid);
-
-//     // Capture and process the output in real-time
-//     let stdout = child.stdout.take().unwrap();
-//     let reader = BufReader::new(stdout);
-//     let mut lines = reader.lines();
-
-//     while let Some(line) = lines.next_line().await.unwrap() {
-//         // Print the output from the shell script to the main thread stdout
-//         println!("Model server log: {}", line);
-//     }
-
-//     // Wait for the process to finish (don't await child directly, use .wait().await)
-//     // child.wait().await.expect("Failed to wait on llama.cpp server process");
-//     match child.wait().await {
-//         Ok(status) => {
-//             println!("Model process completed with status: {}", status);
-//         }
-//         Err(e) => {
-//             eprintln!("Failed to wait for the model process: {}", e);
-//         }
-//     }
-// }
-

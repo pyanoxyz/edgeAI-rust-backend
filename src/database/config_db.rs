@@ -72,4 +72,28 @@ impl DBConfig{
 
         config
     }
+    
+    pub fn get_system_prompt(&self) -> Result<String, rusqlite::Error> {
+        // Lock the common database connection to ensure safe access across threads
+        let connection = self.common_connection.lock().unwrap();
+    
+        // Prepare the SQL statement to select the system_prompt from the config table
+        let mut stmt = connection.prepare(
+            "
+            SELECT
+                system_prompt
+            FROM config WHERE id = 1;
+            ",
+        )?;
+    
+        // Query the database and return the system_prompt as a String
+        let system_prompt = stmt.query_row([], |row| {
+            // Extract and return the system_prompt value from the row
+            row.get(0)
+        });
+    
+        // Return the system_prompt or propagate any error encountered
+        system_prompt
+    }
+
 }

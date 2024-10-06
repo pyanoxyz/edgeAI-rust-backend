@@ -56,13 +56,25 @@ pub async fn mode_state(
 }
 
 #[get("/run-model")]
+//The key component in this function is the data: web::Data<Arc<ModelState>> parameter. 
+//This is a thread-safe, shared state (Arc<ModelState>) injected by the Actix Web framework into the route handler. 
+//It's not provided by the user making the API request, but rather it is set up and passed automatically by the 
+//framework when the API route is hit. The shared state contains the necessary information to manage the model process,
+//including:
+//model_process: Tracks whether a model process is running.
+//model_pid: Stores the process ID (PID) of the running model.
+//This shared state is usually initialized when the server starts and persists in memory while the server runs.
 async fn run_model(
-    data: web::Data<Arc<ModelState>>
+    data: web::Data<Arc<ModelState>> // Accepts the shared state (ModelState) wrapped in an Arc and web::Data for thread-safe access.
 ) -> Result<HttpResponse, Error> {
+    
+    // Acquires an asynchronous lock on the model process state to ensure only one process is running at a time.
     let mut model_process_guard = data.model_process.lock().await;
+
+    // Acquires a synchronous lock on the model PID state, needed to check if a model is already running and to track the PID.
     let model_pid_guard = data.model_pid.lock().unwrap();
 
-    // Check if model is already running
+    // Check if the model process is already running by verifying if the process handle exists.
     let model_running = model_process_guard.is_some();
     if model_running {
         return Ok(
@@ -72,18 +84,19 @@ async fn run_model(
         );
     }
 
-    // Define a callback that stores the process PID in the shared state
+    // Define a callback function that will be invoked when the model process starts, capturing the process PID.
     let callback = {
-        let data_clone = data.clone(); // Clone the Arc<ModelState> to extend the lifetime
-        move |pid: Option<u32>| {
-            let mut model_pid_guard = data_clone.model_pid.lock().unwrap();
-            *model_pid_guard = pid; // Store the PID in shared state
+        let data_clone = data.clone(); // Clone the shared state (Arc<ModelState>) so that the callback can safely reference it.
+        move |pid: Option<u32>| {      // The callback captures the PID of the newly started model process.
+            let mut model_pid_guard = data_clone.model_pid.lock().unwrap();  // Lock the PID to update it.
+            *model_pid_guard = pid;  // Update the PID in the shared state.
         }
     };
 
-    // Start the llama process and get the PID using the callback
+    // Start the model process in the background using tokio's spawn to run it asynchronously.
     let handle = tokio::spawn(async { run_llama_server(callback).await });
 
+    // Store the handle to the running process in the shared state so it can be tracked or stopped later.
     *model_process_guard = Some(handle);
 
     // Log that the script has been triggered
@@ -110,8 +123,6 @@ async fn model_config() -> Result<HttpResponse, Error> {
         }
     }
 }
-
-
 
 #[get("/kill-model")]
 async fn kill_model(
