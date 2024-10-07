@@ -77,17 +77,28 @@ pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Resul
     info!("Reranked documents {:?}", reranked_documents);
 
     let only_pos_distance_documents: String = reranked_documents
-        .unwrap()
-        .into_iter()
-        .filter(|(_, _, score)| *score >= 0.0)   // Filter based on the score (f32)
-        .take(top_n)                                 // Take only the top 4 documents
-        .map(|(document, _, _)| document)        // Extract the document part of the tuple
-        .collect::<Vec<String>>()                // Collect into a Vec<String>
-        .join("----------CONTEXT----------\n");
+    .map(|docs| {
+        docs.into_iter()
+            .filter(|(_, _, score)| *score >= 0.0)  // Filter based on the score (f32)
+            .take(top_n)                            // Take only the top N documents
+            .map(|(document, _, _)| document)       // Extract the document part of the tuple
+            .collect::<Vec<String>>()               // Collect into a Vec<String>
+            .join("----------CONTEXT----------\n")  // Join with separators
+    })
+    .unwrap_or_else(|_| String::new()); 
+
+    info!("only_pos_distance_documents {:?}", only_pos_distance_documents);
 
 
-    let result = format!("----------CONTEXT----------\n{}\nprior_chat: {}", only_pos_distance_documents, last_chats[0]);
 
+    let result = if only_pos_distance_documents.is_empty() {
+        info!("only_pos_distance_documents is empty");
+        format!("prior_chat: {}", last_chats.get(0).unwrap_or(&String::new()))
+    } else {
+        info!("only_pos_distance_documents is not empty");
+        format!("----------CONTEXT----------\n{}\nprior_chat: {}", only_pos_distance_documents, last_chats.get(0).unwrap_or(&String::new()))
+
+    };
     info!("only_pos_distance_documents {:?}", only_pos_distance_documents);
 
     // info!("Reranked documents {:?}", rerank_documents);

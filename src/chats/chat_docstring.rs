@@ -17,7 +17,6 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(chat_docstring); // Register the correct route handler
 }
 
-
 #[post("/chat/docstring")]
 pub async fn chat_docstring(data: web::Json<DocStringRequest>, _req: HttpRequest) -> Result<HttpResponse, Error> {
     let session_id = match check_session(data.session_id.clone()) {
@@ -32,7 +31,6 @@ pub async fn chat_docstring(data: web::Json<DocStringRequest>, _req: HttpRequest
             );
         }
     };
-    
     
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
