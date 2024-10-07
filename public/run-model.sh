@@ -90,7 +90,7 @@ check_and_download_model() {
         echo "Model file $MODEL_NAME not found. Downloading..."
 
         # Download the model using your preferred method
-        "$(dirname "$0")/download_file" "$MODEL_URL" "$MODEL_PATH"
+        $HOME/.pyano/bin/downloader "$MODEL_URL" "$MODEL_PATH"
 
         echo "Model file downloaded to $MODEL_DIR/$MODEL_NAME."
     else

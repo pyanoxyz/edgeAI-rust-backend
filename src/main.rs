@@ -70,11 +70,9 @@ async fn main() -> std::io::Result<()> {
     });
 
     // Access the environment variables
-    let llm_server_url = env::var("LOCAL_URL").expect("LOCAL_URL not found");
-    let temperature = env::var("TEMPERATURE").expect("TEMPERATURE not found");
-    let cloud_execution_mode = env
-        ::var("CLOUD_EXECUTION_MODE")
-        .expect("API_KEY not found");
+    let llm_server_url = crate::utils::get_local_url();
+    let temperature = crate::utils::get_llm_temperature();
+    let cloud_execution_mode = crate::utils::is_cloud_execution_mode();
 
     println!("LLM Server URL: {}", llm_server_url);
     println!("Temperature: {}", temperature);
