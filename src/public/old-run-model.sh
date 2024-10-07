@@ -32,23 +32,23 @@ select_model() {
         MODEL_NAME="qwen2.5-coder-1.5b-instruct-q8_0.gguf"
         MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q8_0.gguf"
         # MODEL_URL="https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q3_K_L.gguf"
-        CTX=8192
-        BATCH_SIZE=1024 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
+        CTX=20000
+        BATCH_SIZE=8192 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
                         #is 8 tokens long at the batch size is 4, then it'll send two chunks of 4. It may be more efficient to process 
                         # in larger chunks. For some models or approaches, sometimes that is the case. It will depend on how llama.cpp handles it.
                         #larger BATCH size is speedup processing but more load on Memory
-        GPU_LAYERS_OFFLOADED=16 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, 
+        GPU_LAYERS_OFFLOADED=-1 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, 
                                 #you can use -1 to move all to GPU.
 
     elif [ $ram_gb -gt 24 ]; then
         MODEL_NAME="Meta-Llama-3.1-70B-Instruct-IQ1_M.gguf"
         MODEL_URL="https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-70B-Instruct-IQ1_M.gguf"
-        CTX=32768
+        CTX=20000
         BATCH_SIZE=8192 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
                         #is 8 tokens long at the batch size is 4, then it'll send two chunks of 4. It may be more efficient to process 
                         # in larger chunks. For some models or approaches, sometimes that is the case. It will depend on how llama.cpp handles it.
                         #larger BATCH size is speedup processing but more load on Memory        
-        GPU_LAYERS_OFFLOADED=16 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, you can use -1 to move all to GPU.
+        GPU_LAYERS_OFFLOADED=-1 #The number of layers to put on the GPU. The rest will be on the CPU. If you don't know how many layers there are, you can use -1 to move all to GPU.
     else
 
         # MODEL_NAME="Llama-3.1-SuperNova-Lite-Q6_K_L.gguf"

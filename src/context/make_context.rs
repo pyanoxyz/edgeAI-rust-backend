@@ -7,9 +7,10 @@ use std::future::Future;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use log::{error, debug, info};
 use crate::rerank::rerank::rerank_documents;
+use std::collections::HashSet;
 
 
-pub async fn make_context(session_id: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
+pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Result<String, Box<dyn Error>> {
     // Retrieve the last 4 chats
     let last_chats = match DB_INSTANCE.get_last_n_chats(session_id, 4) {
         Ok(chats) => chats,
@@ -64,18 +65,40 @@ pub async fn make_context(session_id: &str, prompt: &str) -> Result<String, Box<
 
 
 
-    let mut all_context = last_chats.clone();  // Clone if you don't want to modify vec1
-    all_context.extend(formatted_context.clone());    // Append vec2 to vec1
-    all_context.extend(nearest_queries.clone());  
+
+    let mut all_context: HashSet<String> = last_chats.clone().into_iter().collect();  // Convert to HashSet to remove duplicates
+    all_context.extend(formatted_context.into_iter());    // Extend with the second Vec
+    all_context.extend(nearest_queries.into_iter());      // Extend with the third Vec
+    
+    let all_context: Vec<String> = all_context.into_iter().collect();  // Convert back to Vec
+
 
     let reranked_documents = rerank_documents(prompt, all_context).await;
     info!("Reranked documents {:?}", reranked_documents);
 
+    let only_pos_distance_documents: String = reranked_documents
+        .unwrap()
+        .into_iter()
+        .filter(|(_, _, score)| *score >= 0.0)   // Filter based on the score (f32)
+        .take(top_n)                                 // Take only the top 4 documents
+        .map(|(document, _, _)| document)        // Extract the document part of the tuple
+        .collect::<Vec<String>>()                // Collect into a Vec<String>
+        .join("----------CONTEXT----------\n");
+
+
+    let result = format!("----------CONTEXT----------\n{}\nprior_chat: {}", only_pos_distance_documents, last_chats[0]);
+
+    info!("only_pos_distance_documents {:?}", only_pos_distance_documents);
+
     // info!("Reranked documents {:?}", rerank_documents);
 
     // Return the result (replace with actual result processing)
-    Ok("Processed context successfully".to_string())
+    Ok(result)
 }
+
+
+
+
 
 /// Measures the time taken to execute an asynchronous function.
 ///

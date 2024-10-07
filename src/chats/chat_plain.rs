@@ -7,7 +7,7 @@ use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
 use crate::context::make_context::make_context;
-
+use log::warn;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatRequest {
     pub prompt: String,
@@ -51,40 +51,35 @@ pub async fn chat(data: web::Json<ChatRequest>, _req: HttpRequest) -> Result<Htt
 
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    let _ = make_context(&session_id, &data.prompt);
     
-    //TODO: Add context
-    let prompt_with_context = format!(
-        r#"
-        Context from prior conversations and uploaded files: {context}
+    let context = make_context(&session_id, &data.prompt, 4).await?;
+
+    let prompt_with_context = format!(r#"
+        Context from prior conversations and uploaded files (separated by '----------CONTEXT----------'): 
+        {context}
         New question or coding request: {user_prompt}
-        Response should follow instruction-tuning principles.
+
+        Please provide your response following instruction-tuning principles.
         "#,
-        context = "empty context",
-        user_prompt =  &data.prompt
-    );
-    let system_prompt: &str =
-        r#"
-        You are an AI coding assistant specializing in programming questions, code generation, and multi-turn conversations. 
-        Your responses should be concise, context-aware, and instruction-tuned, leveraging both past interactions 
-        and user-provided data to offer relevant, step-by-step guidance.
+            context = context,
+            user_prompt = &data.prompt
+        );
 
-        When offering code solutions:
-        - Provide code examples or modifications to enhance clarity.
-        - Use context to suggest optimizations or anticipate common issues.
-        - Handle complex requests across multiple turns, remembering prior context.
-
-        For formatting:
-        - Use Gfm if necessary
-        - Use proper tabs spaces and indentation.
-        - Use single-line code blocks with `<code here>`.
-        - Use comments syntax of the programming language for comments in code blocks.
-        - Use multi-line blocks with:
-        ```<language>
-        <code here>
-        ```
-        Reflect, verify correctness, and explain concisely.
-    "#;
+    let system_prompt: &str = r#"
+        You are an AI coding assistant. Your responses should be concise, instruction-tuned, and context-aware. 
+        Context will include sections separated by '----------CONTEXT----------', which may contain code snippets, user chats, or uploaded files. 
+        Incorporate all relevant context in your responses.
+        
+        Key guidelines:
+        - Reference context, especially code, when responding.
+        - For uploaded files, integrate both the file content and prior_chat for accurate answers.
+        - Offer code examples or improvements as needed.
+        - Optimize responses across multiple turns, remembering context.
+        
+        Formatting:
+        - Use GFM when required.
+        - Follow proper indentation, comments, and single/multi-line code block conventions.
+        "#;
 
     let response = stream_to_chat_client(
         &session_id,

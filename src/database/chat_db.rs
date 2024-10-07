@@ -222,7 +222,7 @@ impl DBConfig {
     
         Ok(chats)
     }
-    
+
     pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String)>, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().unwrap();
         let query_embedding_bytes = cast_slice(&query_embeddings);
@@ -259,10 +259,11 @@ impl DBConfig {
                 r#"
                 SELECT
                     prompt, compressed_prompt_response
-                FROM context_children
-                WHERE vec_rowid = ?
+                FROM chats
+                WHERE vec_row_id = ?
                 "#,
             ).map_err(|e| format!("Failed to prepare context query: {}", e))?;
+
 
             let context_iter = stmt
                 .query_map(params![rowid], |row| {
@@ -276,8 +277,6 @@ impl DBConfig {
                 query_context.push(context.map_err(|e| format!("Failed to collect context data: {}", e))?);
             }
         }
-
-
         Ok(query_context)
     }
 }
