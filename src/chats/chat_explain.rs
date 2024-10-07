@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
+use crate::context::make_context::make_context;
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,12 +15,9 @@ pub struct ChatExplainRequest {
     pub session_id: Option<String>,
 }
 
-
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(chat_explain); // Register the correct route handler
 }
-
-
 
 #[post("/chat/explain")]
 pub async fn chat_explain(data: web::Json<ChatExplainRequest>, _req: HttpRequest) -> Result<HttpResponse, Error> {
@@ -36,7 +34,6 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, _req: HttpRequest
         }
     };
     
-    
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
@@ -47,49 +44,41 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, _req: HttpRequest
     // Wrap your data in a Mutex or RwLock to ensure thread safety
     let shared_prompt = Arc::new(Mutex::new(data.prompt.clone()));
     let shared_prompt_clone = Arc::clone(&shared_prompt);
-
-
+    let context = make_context(&session_id, &data.prompt, 3).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     
     
-    //TODO: Add context
-    let prompt_with_context = format!(
-        r#"
-        Context from prior conversations and uploaded files: {context}
+    let prompt_with_context = format!(r#"
+        Context from prior conversations and uploaded files (separated by '----------CONTEXT----------'): 
+        {context}
         New question or coding request: {user_prompt}
+
+        Please provide your response following instruction-tuning principles.
         "#,
-        context = "empty context",
-        user_prompt =  &data.prompt
-    );
-    let system_prompt: &str =
-        r#"
-        You are an expert code analyst specializing in breaking down code snippets and functions in a clear, step-by-step manner. \
-            Follow these guidelines for a detailed explanation:
+            context = context,
+            user_prompt = &data.prompt
+        );
 
-            1. **High-level overview**: Summarize the overall purpose of the code.
-            2. **Step-by-step breakdown**: Analyze each significant part, explaining its functionality and purpose.
-            3. **Algorithms/Design patterns**: Highlight key algorithms, data structures, or design patterns.
-            4. **Optimization/Improvements**: Suggest potential optimizations or improvements.
-            5. **Edge cases/Issues**: Identify possible issues or edge cases.
-            6. **Clarity**: Use clear, concise language suitable for all skill levels.
+    let system_prompt: &str = r#"
+        You are an expert code analyst. Provide a step-by-step breakdown of code snippets, following these steps:
 
-            Structure your response with:
-            1. `ORIGINAL CODE` block.
-            2. **EXPLANATION**: Detailed breakdown.
-            3. **SUMMARY**: Brief conclusion.
+        1. **Overview**: Summarize the purpose of the code.
+        2. **Breakdown**: Explain each significant part of the code.
+        3. **Algorithms/Patterns**: Highlight key algorithms, data structures, or design patterns.
+        4. **Optimizations**: Suggest potential improvements.
+        5. **Edge cases**: Identify possible edge cases or issues.
+        6. **Clarity**: Ensure your explanation is easy to understand.
 
-            For formatting:
-            - Use Gfm if necessary
-            - Use proper tabs spaces and indentation.
-            - Use single-line code blocks with `<code here>`.
-            - Use comments syntax of the programming language for comments in code blocks.
-            - Use multi-line blocks with:
-            ```<language>
-            <code here>
-            ```
+        Structure:
+        1. `ORIGINAL CODE`: Display the code.
+        2. **EXPLANATION**: Provide a detailed breakdown.
+        3. **SUMMARY**: Conclude with a brief summary.
 
-            "#;
+        Formatting:
+        - Use GFM when needed.
+        - Ensure proper indentation, comments, and single/multi-line code blocks.
+        "#;
 
     let response = stream_to_chat_client(
         &session_id,

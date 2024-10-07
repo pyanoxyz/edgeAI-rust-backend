@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
+use crate::context::make_context::make_context;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RefactorRequest {
@@ -44,59 +45,42 @@ pub async fn chat_refactor(data: web::Json<RefactorRequest>, _req: HttpRequest) 
     // Wrap your data in a Mutex or RwLock to ensure thread safety
     let shared_prompt = Arc::new(Mutex::new(data.prompt.clone()));
     let shared_prompt_clone = Arc::clone(&shared_prompt);
-
-
+    let context = make_context(&session_id, &data.prompt, 3).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     
     
-    //TODO: Add context
-    let prompt_with_context = format!(
-        r#"
-        Context from prior conversations and uploaded files: {context}
+    let prompt_with_context = format!(r#"
+        Context from prior conversations and uploaded files (separated by '----------CONTEXT----------'): 
+        {context}
         New question or coding request: {user_prompt}
-        Response should follow instruction-tuning principles.
+
+        Please provide your response following instruction-tuning principles.
         "#,
-        context = "empty context",
-        user_prompt =  &data.prompt
-    );
-    let system_prompt: &str =
-            r#"
-            You are an expert software engineer specializing in code refactoring. 
-            Use **re-reading and reflection** to improve the quality, readability, and efficiency of the given code.
+            context = context,
+            user_prompt = &data.prompt
+        );
 
-            Your Approach:
-            1. **Re-read the code** thoroughly, identifying areas for improvement.
-            2. Reflect on multiple refactoring strategies, prioritizing readability, performance, maintainability, and design principles.
-            3. **Refactor the code** using a clear strategy that builds upon previous steps.
-            4. **Review and refine** your changes, ensuring alignment with best practices.
+    let system_prompt: &str = r#"
+        You are an expert software engineer specializing in code refactoring. Your responses should improve code quality, readability, and efficiency. 
 
-            Present your results as follows:
+        Approach:
+        1. Re-read the code to identify areas for improvement.
+        2. Prioritize readability, performance, maintainability, and design principles.
+        3. Refactor the code with a clear strategy.
+        4. Review and refine your changes to align with best practices.
 
-            **THOUGHT PROCESS**:
-            [Brief outline of your analysis and decision-making process after re-reading]
+        Present results:
 
-            **REFACTORED CODE**:
-            ```[Insert refactored code here]```
+        - **THOUGHT PROCESS**: [Outline your analysis and decisions]
+        - **REFACTORED CODE**: ```[Insert refactored code]```
+        - **EXPLANATION**: [Explain key changes and benefits]
+        - **REFLECTION**: [Reflect on the refactoring’s impact and any trade-offs]
 
-            **EXPLANATION**:
-            [Concise explanation of key changes and their benefits]
-
-            **REFLECTION**:
-            [Brief reflection on the refactoring's impact, any trade-offs, and whether re-reading improved your reasoning]
-
-            Ensure each section is clear and precise, focusing on improvements and efficiency.
-
-            For formatting:
-            - Use Gfm if necessary
-            - Use proper tabs spaces and indentation.
-            - Use single-line code blocks with `<code here>`.
-            - Use comments syntax of the programming language for comments in code blocks.
-            - Use multi-line blocks with:
-            ```<language>
-            <code here>
-            ```
-        "#;
+        Formatting:
+        - Use GFM if necessary.
+        - Use proper indentation, comments, and single/multi-line code blocks.
+    "#;
 
     let response = stream_to_chat_client(
         &session_id,
