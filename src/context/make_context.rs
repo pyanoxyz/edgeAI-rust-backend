@@ -5,10 +5,11 @@ use crate::database::db_config::DB_INSTANCE;
 use std::time::{Duration, Instant};
 use std::future::Future;
 use crate::embeddings::text_embeddings::generate_text_embedding;
-use log::{error, debug};
+use log::{error, debug, info};
+use crate::rerank::rerank::rerank_documents;
 
 
-pub async fn context(session_id: &str, user_id: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
+pub async fn make_context(session_id: &str, prompt: &str) -> Result<String, Box<dyn Error>> {
     // Retrieve the last 4 chats
     let last_chats = match DB_INSTANCE.get_last_n_chats(session_id, 4) {
         Ok(chats) => chats,
@@ -66,6 +67,11 @@ pub async fn context(session_id: &str, user_id: &str, prompt: &str) -> Result<St
     let mut all_context = last_chats.clone();  // Clone if you don't want to modify vec1
     all_context.extend(formatted_context.clone());    // Append vec2 to vec1
     all_context.extend(nearest_queries.clone());  
+
+    let reranked_documents = rerank_documents(prompt, all_context).await;
+    info!("Reranked documents {:?}", reranked_documents);
+
+    // info!("Reranked documents {:?}", rerank_documents);
 
     // Return the result (replace with actual result processing)
     Ok("Processed context successfully".to_string())

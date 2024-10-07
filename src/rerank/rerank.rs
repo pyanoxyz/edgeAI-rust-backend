@@ -62,49 +62,41 @@ static RERANK_MANAGER: Lazy<Result<Arc<Mutex<RerankManager>>, Box<dyn Error + Se
 });
 
 
-
-
-
-
-// // Function to create embeddings for a given text, which can be imported from other modules
-// pub async fn rerank_documents(query: &str, documents: Vec<&str>) -> Result<Vec<RerankResult>, Box<dyn Error>> {
-//     // Create the model manager instance
-//     let mut model_manager = RerankManager::new(".pyano/models");
-
-//     // Load the model (this will download the model if it’s not already saved)
-//     model_manager.load_model().await?;
-
-//     // Create text embedding for the given sentence
-//     let reranked_documents = model_manager.rerank_documents(query, documents)?;
-//     debug!("Documents has been rerabked {:?}", reranked_documents);
-//     Ok(reranked_documents)
-// }
-
 pub async fn rerank_documents(
     query: &str,
-    documents: Vec<&str>,
+    documents: Vec<String>,
 ) -> Result<Vec<(String, usize, f32)>, Box<dyn Error + Send + Sync>> {
     // Clone the query and documents to own their data
     let query_cloned = query.to_owned();
-    let documents_cloned: Vec<String> = documents.iter().map(|&s| s.to_owned()).collect();
+    let documents_cloned: Vec<String> = documents.iter().map(|s| s.to_owned()).collect();
 
     // Use spawn_blocking to run blocking code
     let reranked_documents = tokio::task::spawn_blocking(move || {
         // Access the model
         let reranker_manager_guarded = RERANK_MANAGER.as_ref().map_err(|e| {
             error!("Failed to initialize rerank manager {}", e);
-            "Failed to initialize embeddings model"
+            // Return the actual error as a boxed error instead of a string
+            Box::<dyn Error + Send + Sync>::from("Failed to initialize embeddings model")
         })?;
 
-        let rerank_manager = reranker_manager_guarded.lock().unwrap(); // Safely access the model
+        // Safely access the model with proper error handling
+        let rerank_manager = reranker_manager_guarded.lock().map_err(|e| {
+            error!("Failed to acquire lock on rerank manager: {}", e);
+            Box::<dyn Error + Send + Sync>::from("Failed to acquire lock on rerank manager")
+        })?;
 
         // Use references to the owned data
         let query_ref = &query_cloned;
         let documents_refs: Vec<&str> = documents_cloned.iter().map(|s| s.as_str()).collect();
 
-        let reranked_documents = rerank_manager.rerank_documents(query_ref, documents_refs);
+        // Perform reranking and handle any potential error
+        let reranked_documents = rerank_manager.rerank_documents(query_ref, documents_refs)
+            .map_err(|e| {
+                error!("Reranking failed: {}", e);
+                Box::<dyn Error + Send + Sync>::from("Reranking failed")
+            })?;
+
         let result: Vec<(String, usize, f32)> = reranked_documents
-            .unwrap()
             .iter()
             .map(|rerank| {
                 (
@@ -115,9 +107,10 @@ pub async fn rerank_documents(
             })
             .collect();
 
+        // Return the result inside the closure
         Ok::<Vec<(String, usize, f32)>, Box<dyn Error + Send + Sync>>(result)
     })
-    .await??; // Unwrap the results
+    .await??; // Unwrap the results from spawn_blocking and the Result
 
     Ok(reranked_documents)
 }

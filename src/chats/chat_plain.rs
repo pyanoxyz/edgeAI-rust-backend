@@ -1,11 +1,13 @@
 use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
-use crate::llm_stream::handle::stream_to_chat_client;
+use crate::{context::make_context, llm_stream::handle::stream_to_chat_client};
 use serde::{ Deserialize, Serialize };
 use super::chat_types::RequestType;
 use std::sync::{Arc, Mutex};
 use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
+use crate::context::make_context::make_context;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatRequest {
     pub prompt: String,
@@ -49,7 +51,7 @@ pub async fn chat(data: web::Json<ChatRequest>, _req: HttpRequest) -> Result<Htt
 
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    
+    let _ = make_context(&session_id, &data.prompt);
     
     //TODO: Add context
     let prompt_with_context = format!(
