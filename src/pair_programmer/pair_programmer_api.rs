@@ -15,6 +15,7 @@ use crate::embeddings::text_embeddings::generate_text_embedding;
 use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
 use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 use futures::StreamExt; // Ensure StreamExt is imported
+use crate::session_manager::check_session;
 
 
 #[derive(Debug, Serialize)]
@@ -77,12 +78,16 @@ pub async fn pair_programmer_generate_steps(
 
     let user_id = data.user_id.clone().unwrap_or_else(|| "user_id".to_string());
 
-    let session_id = match &data.session_id {
-        Some(id) if !id.is_empty() => id.clone(),
-        _ => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "detail": "Session ID is required"
-            })));
+    let session_id = match check_session(data.session_id.clone()) {
+        Ok(id) => id,
+        Err(e) => {
+            return Err(
+                actix_web::error::ErrorInternalServerError(
+                    json!({
+                "error": e.to_string()
+            })
+                )
+            );
         }
     };
 
@@ -120,9 +125,7 @@ pub async fn pair_programmer_generate_steps(
         
     });
 
-
     Ok(response)
-
 
 }
 
