@@ -1,14 +1,11 @@
-
-
-use actix_web::{web, HttpResponse, Error};
+use actix_web::{ web, HttpResponse, Error };
 use async_stream::stream;
 
 use futures::StreamExt; // Ensure StreamExt is imported
 use actix_web::Error as ActixError;
 use crate::utils::is_cloud_execution_mode;
 
-use std::sync::{Arc, Mutex};
-
+use std::sync::{ Arc, Mutex };
 
 use super::types::AccumulatedStream;
 use super::remote::remote_agent_execution;
@@ -25,9 +22,13 @@ pub async fn stream_to_chat_client(
     let mut stream = match stream_result {
         Ok(s) => s,
         Err(e) => {
-            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            return Ok(
+                HttpResponse::InternalServerError().json(
+                    serde_json::json!({
                 "error": format!("Local LLM response error: {}", e)
-            })));
+            })
+                )
+            );
         }
     };
 
@@ -48,10 +49,11 @@ pub async fn stream_to_chat_client(
                     }
                 }
                 Err(e) => {
-                    yield Err(actix_web::error::ErrorInternalServerError(format!(
-                        "Error while streaming: {}",
-                        e
-                    )));
+                    yield Err(
+                        actix_web::error::ErrorInternalServerError(
+                            format!("Error while streaming: {}", e)
+                        )
+                    );
                 }
             }
         }
@@ -63,26 +65,24 @@ pub async fn stream_to_chat_client(
     // Return the response as a streaming body
     let response = HttpResponse::Ok()
         .content_type("application/json")
-        .append_header(("session_id", session_id.clone())) // Add the header here
+        .append_header(("X-Session-ID", session_id.clone())) // Add the header here
         .streaming(response_stream);
 
     Ok(response)
 }
 
-
-
 pub async fn handle_request(
     system_prompt: &str,
-    full_user_prompt: &str,
+    full_user_prompt: &str
 ) -> Result<AccumulatedStream, ActixError> {
     let stream: AccumulatedStream = if is_cloud_execution_mode() {
-        remote_agent_execution(system_prompt, full_user_prompt)
-            .await
-            .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
+        remote_agent_execution(system_prompt, full_user_prompt).await.map_err(|e|
+            ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
+        )?
     } else {
-        local_agent_execution(system_prompt, full_user_prompt)
-            .await
-            .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
+        local_agent_execution(system_prompt, full_user_prompt).await.map_err(|e|
+            ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
+        )?
     };
 
     // Shared state using Arc<Mutex<_>>
