@@ -3,6 +3,9 @@ use std::fs;
 use std::path::Path;
 use dirs::home_dir;
 
+
+
+
 fn main() {
     // Get the home directory
     if let Some(home_dir) = home_dir() {
@@ -21,8 +24,9 @@ fn main() {
             // println!("cargo:rustc-link-arg=Foundation");
 
 
-            let libtorch_path = home_dir.join(".pyano").join("binaries");
+            let libtorch_path = home_dir.join(".pyano").join("bin").join("libtorch");
             // let libtorch_path_str ="/opt/homebrew/Cellar/pytorch/2.4.1/";
+
 
             let libtorch_path_str = libtorch_path.to_str().expect("Invalid libtorch path");
 
@@ -45,10 +49,17 @@ fn main() {
                 fs::create_dir_all(&libtorch_path).expect("Failed to create directories for libtorch");
             }
 
+            // // Set RPATH for linking at runtime
+            // println!("cargo:rustc-link-search=native={}/lib", libtorch_path_str);
+            // println!("cargo:rustc-link-arg=-Wl,-rpath,{}/lib", libtorch_path_str);
+
             // Set RPATH for linking at runtime
             println!("cargo:rustc-link-search=native={}/lib", libtorch_path_str);
             println!("cargo:rustc-link-arg=-Wl,-rpath,{}/lib", libtorch_path_str);
 
+            // Explicitly add the LibTorch path to the runtime search path
+            println!("cargo:rustc-env=LD_LIBRARY_PATH={}/lib", libtorch_path_str);
+            println!("cargo:rustc-env=DYLD_LIBRARY_PATH={}/lib", libtorch_path_str);
             // Optional: add the logic to download manually if required
         }
         } else {

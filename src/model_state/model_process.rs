@@ -1,10 +1,9 @@
-use log::{debug, error};
-use std::env;
+use log::{debug, error, info};
+use dirs::home_dir;
 use tokio::io::{ AsyncBufReadExt, BufReader };
 use tokio::process::Command as tokio_command;
 use std::collections::HashMap;
 use super::state::ConfigSection;
-use dirs::home_dir;
 use std::fs::create_dir_all;
 use std::fs;
 use std::process::Command;
@@ -140,12 +139,12 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
 
 
     // Retrieves the current working directory of the process
-    let project_root = env::current_dir().unwrap();
-    
+    let scripts_dir = home_dir.join(".pyano/scripts");    
     // Joins the current directory with the relative path to the script that will run the model
     //this is the shell script that containes the logic to run the model with llama-cpp and serves
     // the model on a http server
-    let script_path = project_root.join("src/public/run-model.sh");
+    let script_path = scripts_dir.join("run-model.sh");
+    info!("Scripts path from where run_models.hs i sbeing loaded {:?}", script_path);
 
     // Spawns a new child process to run the shell script using `bash`, passing environment variables from the selected config
     let mut child = match

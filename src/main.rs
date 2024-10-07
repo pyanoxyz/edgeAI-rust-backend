@@ -7,7 +7,8 @@ use dotenv::dotenv;
 use std::env;
 use std::sync::{ Arc, Mutex };
 use tokio::sync::Mutex as TokioMutex; // Import tokio's async mutex
-
+use std::path::PathBuf;
+use dirs::home_dir;
 
 mod chats; // Import the chats module
 mod authentication;
@@ -58,9 +59,9 @@ async fn json_handler(info: web::Json<Info>) -> impl Responder {
 }
 
 
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+
     dotenv().ok();
 
     let model_state = Arc::new(ModelState {

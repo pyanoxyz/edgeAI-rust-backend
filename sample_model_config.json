@@ -9,7 +9,6 @@
       "mlock": false,
       "mmap": false,
       "system_prompt": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-
     },
     "16": {
       "model_name": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
