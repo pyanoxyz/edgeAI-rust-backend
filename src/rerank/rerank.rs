@@ -1,9 +1,10 @@
-use std::fs::{self};
 use std::error::Error;
-use log::debug;
+use log::{debug, error};
 use dirs::home_dir;
 use std::path::{Path, PathBuf};
 use fastembed::{TextRerank, RerankInitOptions, RerankerModel, RerankResult};
+use std::sync::{Mutex, Arc};
+use once_cell::sync::Lazy;
 
 pub struct RerankManager {
     save_path: PathBuf,
@@ -20,14 +21,7 @@ impl RerankManager {
         }
     }
     // Function to load the model to the specified directory
-    pub async fn load_model(&mut self) -> Result<(), Box<dyn Error>> {
-        let save_path = Path::new(&self.save_path);
-        if !save_path.exists() {
-            // Create the directory if it doesn't exist
-            fs::create_dir_all(save_path)?;
-        }
-
-
+    pub fn load_model(&mut self) -> Result<(), Box<dyn Error>> {
         // Setting up the InitOptions with model_name and cache_dir
         let init_options = RerankInitOptions::new(RerankerModel::BGERerankerBase)
             .with_cache_dir(self.save_path.clone()); // Set cache directory
@@ -36,7 +30,6 @@ impl RerankManager {
         let model = TextRerank::try_new(init_options)?;
 
         self.model = Some(model);
-        debug!("Rerank Model loaded and saved to {} successfully.", save_path.display());
         Ok(())
     }
 
@@ -51,16 +44,80 @@ impl RerankManager {
     }
 }
 
-// Function to create embeddings for a given text, which can be imported from other modules
-pub async fn rerank_documents(query: &str, documents: Vec<&str>) -> Result<Vec<RerankResult>, Box<dyn Error>> {
-    // Create the model manager instance
-    let mut model_manager = RerankManager::new(".pyano/models");
+static RERANK_MANAGER: Lazy<Result<Arc<Mutex<RerankManager>>, Box<dyn Error + Send + Sync>>> = Lazy::new(|| {
+    let home_dir = home_dir().expect("Failed to retrieve home directory");
+    let rerank_dir = home_dir.join(".pyano/models/reranker");
 
-    // Load the model (this will download the model if it’s not already saved)
-    model_manager.load_model().await?;
+    // Ensure the model directory exists
+    std::fs::create_dir_all(&rerank_dir).expect("Failed to create model directory");
 
-    // Create text embedding for the given sentence
-    let reranked_documents = model_manager.rerank_documents(query, documents)?;
-    debug!("Documents has been rerabked {:?}", reranked_documents);
+    let rerank_dir_str = rerank_dir
+        .to_str()
+        .expect("Failed to convert PathBuf to str")
+        .to_string();
+
+    let mut model_manager: RerankManager = RerankManager::new(&rerank_dir_str);
+    model_manager.load_model();
+    Ok(Arc::new(Mutex::new(model_manager)))
+});
+
+
+
+
+
+
+// // Function to create embeddings for a given text, which can be imported from other modules
+// pub async fn rerank_documents(query: &str, documents: Vec<&str>) -> Result<Vec<RerankResult>, Box<dyn Error>> {
+//     // Create the model manager instance
+//     let mut model_manager = RerankManager::new(".pyano/models");
+
+//     // Load the model (this will download the model if it’s not already saved)
+//     model_manager.load_model().await?;
+
+//     // Create text embedding for the given sentence
+//     let reranked_documents = model_manager.rerank_documents(query, documents)?;
+//     debug!("Documents has been rerabked {:?}", reranked_documents);
+//     Ok(reranked_documents)
+// }
+
+pub async fn rerank_documents(
+    query: &str,
+    documents: Vec<&str>,
+) -> Result<Vec<(String, usize, f32)>, Box<dyn Error + Send + Sync>> {
+    // Clone the query and documents to own their data
+    let query_cloned = query.to_owned();
+    let documents_cloned: Vec<String> = documents.iter().map(|&s| s.to_owned()).collect();
+
+    // Use spawn_blocking to run blocking code
+    let reranked_documents = tokio::task::spawn_blocking(move || {
+        // Access the model
+        let reranker_manager_guarded = RERANK_MANAGER.as_ref().map_err(|e| {
+            error!("Failed to initialize rerank manager {}", e);
+            "Failed to initialize embeddings model"
+        })?;
+
+        let rerank_manager = reranker_manager_guarded.lock().unwrap(); // Safely access the model
+
+        // Use references to the owned data
+        let query_ref = &query_cloned;
+        let documents_refs: Vec<&str> = documents_cloned.iter().map(|s| s.as_str()).collect();
+
+        let reranked_documents = rerank_manager.rerank_documents(query_ref, documents_refs);
+        let result: Vec<(String, usize, f32)> = reranked_documents
+            .unwrap()
+            .iter()
+            .map(|rerank| {
+                (
+                    rerank.document.as_ref().unwrap().to_owned(),
+                    rerank.index,
+                    rerank.score,
+                )
+            })
+            .collect();
+
+        Ok::<Vec<(String, usize, f32)>, Box<dyn Error + Send + Sync>>(result)
+    })
+    .await??; // Unwrap the results
+
     Ok(reranked_documents)
 }

@@ -18,10 +18,17 @@ pub async fn handle_stream_completion(
     if let Ok(_) = rx.await {
         let accumulated_content_final = accumulated_content.lock().unwrap().clone();
         // let summary = summarize_text(&accumulated_content_final).await.unwrap();
+        let prompt = match ts_prompt.lock() {
+            Ok(locked_prompt) => locked_prompt.clone(),
+            Err(e) => {
+                error!("Failed to acquire lock on prompt: {:?}", e);
+                return;
+            }
+        };
 
+        let prompt_n_response = prompt.clone() + &accumulated_content_final;
         // let result = get_attention_scores(&accumulated_content_final).await;
-        let (result, duration) = measure_time_async(||  get_attention_scores(&accumulated_content_final)).await;
-
+        let (result, duration) = measure_time_async(||  get_attention_scores(&prompt_n_response)).await;
 
         let tokens = match result {
             Ok(tokens) => tokens,
@@ -32,7 +39,7 @@ pub async fn handle_stream_completion(
         };
         debug!("Time elapsed in compressing result {:?}", duration);
         // let embeddings_result = generate_text_embedding(&accumulated_content_final).await;
-        let (embeddings_result, duration) = measure_time_async(|| generate_text_embedding(&accumulated_content_final)).await;
+        let (embeddings_result, duration) = measure_time_async(|| generate_text_embedding(&prompt_n_response)).await;
 
         let embeddings = match embeddings_result {
             Ok(embeddings_value) => embeddings_value,
@@ -43,7 +50,7 @@ pub async fn handle_stream_completion(
         };
         debug!("Time elapsed in generating embeddings {:?}", duration);
 
-        let compressed_prompt = tokens.join(" ");
+        let compressed_prompt_response = tokens.join(" ");
 
         let session_id = match ts_session_id.lock() {
             Ok(locked_session_id) => locked_session_id.clone(),
@@ -53,20 +60,11 @@ pub async fn handle_stream_completion(
             }
         };
 
-        let prompt = match ts_prompt.lock() {
-            Ok(locked_prompt) => locked_prompt.clone(),
-            Err(e) => {
-                error!("Failed to acquire lock on prompt: {:?}", e);
-                return;
-            }
-        };
-
-        
         let db_response = DB_INSTANCE.store_chats(
             "user_id",
             &session_id,
             &prompt,
-            &compressed_prompt,
+            &compressed_prompt_response,
             &accumulated_content_final,
             &embeddings,
             request_type.to_string(),

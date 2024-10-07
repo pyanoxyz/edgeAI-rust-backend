@@ -2,12 +2,13 @@
 
 use crate::database::db_config::DBConfig;
 use uuid::Uuid;
-use rusqlite::params;
-use rusqlite::Result;
 use zerocopy::AsBytes;
 use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
 use rand::Rng;
+use rusqlite::{params, Error as RusqliteError};
+use bytemuck::cast_slice;
+use std::error::Error;
 
 impl DBConfig{
 
@@ -135,58 +136,58 @@ impl DBConfig{
 
     pub fn query_session_context(
         &self,
-        user_id: &str,
-        session_id: &str,
-        query_embeddings: Vec<f32>    
-    ) -> Result<Vec<serde_json::Value>> {
-        let connection = self.connection.lock().unwrap();
-        
-        // Step 1: Query nearest embeddings based on the vector search.
-        let nearest_embeddings: Vec<(i64, f64)> = connection
-            .prepare(
-                r#"
-                SELECT
-                    rowid,
-                    distance
-                FROM context_embeddings
-                WHERE embeddings MATCH ?1
-                ORDER BY distance
-                LIMIT 30
-                "#,
-            )?
-            .query_map([query_embeddings.as_bytes()], |row| {
-                Ok((row.get(0)?, row.get(1)?)) // rowid and distance
+        query_embeddings: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<(String, String, String)>, Box<dyn Error>> {
+        // Lock the database connection safely
+        let connection = self.connection.lock().map_err(|e| {
+            format!("Failed to acquire lock: {}", e)
+        })?;
+    
+        // Convert the embeddings vector to a byte slice
+        let query_embedding_bytes = cast_slice(&query_embeddings);
+    
+        // Prepare the SQL statement to find the nearest embeddings
+        let mut stmt = connection.prepare(
+            r#"
+            SELECT
+                rowid
+            FROM context_embeddings
+            WHERE embeddings MATCH ?
+            ORDER BY distance
+            LIMIT ?
+            "#,
+        )?;
+    
+        // Execute the query and collect the nearest embeddings
+        let nearest_embeddings: Vec<i64> = stmt
+            .query_map(params![query_embedding_bytes, limit as i64], |row| {
+                row.get(0)
             })?
             .collect::<Result<Vec<_>, _>>()?;
     
-        // Step 2: For each rowid, collect content and file_path from context_children table, and convert to JSON.
-        let mut context_files: Vec<serde_json::Value> = Vec::new();
+        // Collect context data for each nearest embedding
+        let mut context_files: Vec<(String, String, String)> = Vec::new();
     
-        for (rowid, distance) in nearest_embeddings {
+        for rowid in nearest_embeddings {
             let mut stmt = connection.prepare(
                 r#"
                 SELECT
-                    content,
                     file_path,
                     chunk_type,
-                    timestamp
+                    content
                 FROM context_children
-                WHERE vec_rowid = ?1
+                WHERE vec_rowid = ?
                 "#,
             )?;
     
-            let context_iter = stmt.query_map([rowid], |row| {
-                Ok(json!({
-                    "rowid": rowid,
-                    "distance": distance,
-                    "content": row.get::<_, String>(0)?,   // content
-                    "file_path": row.get::<_, String>(1)?, // file_path
-                    "chunk_type": row.get::<_, String>(2)?, // chunk_type
-                    "timestamp": row.get::<_, String>(3)?,  // timestamp
-                }))
+            let context_iter = stmt.query_map(params![rowid], |row| {
+                let file_path: String = row.get(0)?;
+                let chunk_type: String = row.get(1)?;
+                let content: String = row.get(2)?;
+                Ok((file_path, chunk_type, content))
             })?;
     
-            // Collect all rows into the `context_files` vector as JSON objects.
             for context in context_iter {
                 context_files.push(context?);
             }

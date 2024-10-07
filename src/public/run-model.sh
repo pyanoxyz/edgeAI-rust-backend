@@ -162,6 +162,5 @@ $BUILD_DIR/llama-server \
     --prompt-cache-all \
     --repeat-last-n 64 \
     --repeat-penalty 1.3 \
-    --prio 3 \
     --top-k 40 \
     --top-p 0.9

@@ -126,21 +126,6 @@ static EMBEDDINGS_MODEL: Lazy<Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dy
     Ok(Arc::new(Mutex::new(model)))
 });
 
-// // Function to ensure model is initialized only once
-// fn ensure_initialized(manager: &EmbeddingsManager) -> Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dyn Error + Send + Sync>> {
-//     unsafe {
-//         INIT.call_once(|| {
-//             if let Ok(model) = manager.initialize_model() {
-//                 EMBEDDINGS_MODEL = Some(Arc::new(Mutex::new(model)));
-//             }
-//         });
-
-//         // Return the initialized model or error if it failed
-//         EMBEDDINGS_MODEL.clone().ok_or_else(|| "Failed to initialize the model.".into())
-//     }
-// }
-
-
 pub async fn generate_text_embedding(text: &str) -> Result<Vec<f32>, Box<dyn Error + Send + Sync>> {
     let text_owned = text.to_string();
     info!("Generate embedding for Length {}", text.len());

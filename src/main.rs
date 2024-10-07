@@ -24,6 +24,7 @@ mod pair_programmer;
 mod summarization;
 mod model_state;
 mod llm_stream;
+mod context;
 use crate::model_state::state::ModelState;
 
 #[get("/")]

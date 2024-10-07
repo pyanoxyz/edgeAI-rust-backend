@@ -119,7 +119,6 @@ async fn fetch_similar_entries(
     req: HttpRequest,
     data: web::Json<FetchContextRequest>,
 ) -> Result<HttpResponse, Error> { 
-    let user_id = data.user_id.clone().unwrap_or_else(|| "user_id".to_string());
 
     if data.session_id.is_empty() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -144,7 +143,7 @@ async fn fetch_similar_entries(
         }))),
     };
 
-    let entries = DB_INSTANCE.query_session_context(&user_id, &data.session_id, query_embeddings).unwrap();
+    let entries = DB_INSTANCE.query_session_context(query_embeddings, 10).unwrap();
     Ok(HttpResponse::Ok()
     .insert_header(("X-Session-Id", data.session_id.clone())) // Add session_id in custom header
     .json(json!({

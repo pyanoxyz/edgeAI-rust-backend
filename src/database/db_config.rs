@@ -84,7 +84,7 @@ impl DBConfig {
                 session_id TEXT NOT NULL,
                 vec_row_id TEXT NOT NULL,
                 prompt TEXT,
-                compressed_prompt TEXT,
+                compressed_prompt_response TEXT,
                 response TEXT,
                 timestamp TEXT,
                 request_type TEXT
