@@ -153,7 +153,7 @@ $BUILD_DIR/llama-server \
     --color \
     --metrics \
     --batch-size "$BATCH_SIZE" \
-    $( [ "$MMAP" == "true" ] && echo "--mmap" || echo "--no-mmap" ) \
+    $( [ "$MMAP" == "true" ]|| echo "--no-mmap" ) \
     $( [ "$MLOCK" == "true" ] && echo "--mlock" ) \
     --conversation \
     --flash-attn \

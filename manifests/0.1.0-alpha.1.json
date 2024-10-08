@@ -6,9 +6,9 @@
       "url": "https://downloads.pyano.network/resources/backend/bin/pyano_server"
     },
     {
-      "name": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+      "name": "Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
       "path": ".pyano/models/",
-      "url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"
+      "url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf"
     },
     {
       "name": "languages.so",
