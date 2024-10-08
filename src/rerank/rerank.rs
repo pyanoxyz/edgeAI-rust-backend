@@ -23,7 +23,7 @@ impl RerankManager {
     // Function to load the model to the specified directory
     pub fn load_model(&mut self) -> Result<(), Box<dyn Error>> {
         // Setting up the InitOptions with model_name and cache_dir
-        let init_options = RerankInitOptions::new(RerankerModel::BGERerankerBase)
+        let init_options = RerankInitOptions::new(RerankerModel::JINARerankerV1TurboEn)
             .with_cache_dir(self.save_path.clone()); // Set cache directory
 
         // Load model using the custom InitOptions

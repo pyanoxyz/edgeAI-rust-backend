@@ -175,6 +175,37 @@
       "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/059214673d9d6d2ee319411e2ffec8c024b816d5"
     },
     {
+      "name": "main",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/main"
+    },
+    {
+      "name": "d5698132694f4f1bcff08fa7d937b1701812598e",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/d5698132694f4f1bcff08fa7d937b1701812598e",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/d5698132694f4f1bcff08fa7d937b1701812598e"
+    },
+    {
+      "name": "c1296c66c119de645fa9cdee536d8637740efe85224cfa270281e50f213aa565",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/c1296c66c119de645fa9cdee536d8637740efe85224cfa270281e50f213aa565"
+    },
+    {
+      "name": "61287c716716abd7a3096ff2f74a1de6e20d589b",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/61287c716716abd7a3096ff2f74a1de6e20d589b"
+    },
+    {
+      "name": "1febe623f0d5566bf1dd91fb0641a29e122ee6e3",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/1febe623f0d5566bf1dd91fb0641a29e122ee6e3"
+    },
+    {
+      "name": "742b5d2b49f1a9222693ca4295f3226716f2f2bc",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/742b5d2b49f1a9222693ca4295f3226716f2f2bc"
+    },
+
+    {
       "name": "llama-server",
       "path": ".pyano/build/bin/",
       "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-server"
