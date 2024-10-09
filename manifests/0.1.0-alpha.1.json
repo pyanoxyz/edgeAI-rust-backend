@@ -181,7 +181,7 @@
     },
     {
       "name": "d5698132694f4f1bcff08fa7d937b1701812598e",
-      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/d5698132694f4f1bcff08fa7d937b1701812598e",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
       "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/d5698132694f4f1bcff08fa7d937b1701812598e"
     },
     {

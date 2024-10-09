@@ -4,11 +4,9 @@ use serde::{ Deserialize, Serialize };
 use env_logger::Env;
 use log::info;
 use dotenv::dotenv;
-use std::env;
 use std::sync::{ Arc, Mutex };
 use tokio::sync::Mutex as TokioMutex; // Import tokio's async mutex
-use std::path::PathBuf;
-use dirs::home_dir;
+use reqwest::Client;
 
 mod chats; // Import the chats module
 mod authentication;
@@ -63,6 +61,10 @@ async fn json_handler(info: web::Json<Info>) -> impl Responder {
 async fn main() -> std::io::Result<()> {
 
     dotenv().ok();
+    let client = Client::new();
+    let log_level = "info";
+    info!("Setting LOG_LEVEL : {}", log_level);
+    std::env::set_var("RUST_LOG",log_level);  // Adjust the log level as needed
 
     let model_state = Arc::new(ModelState {
         model_pid: Arc::new(Mutex::new(None)),
@@ -74,9 +76,9 @@ async fn main() -> std::io::Result<()> {
     let temperature = crate::utils::get_llm_temperature();
     let cloud_execution_mode = crate::utils::is_cloud_execution_mode();
 
-    println!("LLM Server URL: {}", llm_server_url);
-    println!("Temperature: {}", temperature);
-    println!("Cloud Execution Mode: {}", cloud_execution_mode);
+    info!("LLM Server URL: {}", llm_server_url);
+    info!("Temperature: {}", temperature);
+    info!("Cloud Execution Mode: {}", cloud_execution_mode);
     env_logger::Builder
         ::from_env(Env::default().default_filter_or("debug"))
         .init();
@@ -100,6 +102,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(web::Data::new(model_state.clone()))
+            .app_data(web::Data::new(client.clone())) // Add client to state
             .wrap(cors)
             .service(hello) // Register the GET route
             .service(echo) // Register the POST route

@@ -54,8 +54,8 @@ select_model() {
         # MODEL_NAME="Llama-3.1-SuperNova-Lite-Q6_K_L.gguf"
         # MODEL_URL="https://huggingface.co/bartowski/Llama-3.1-SuperNova-Lite-GGUF/resolve/main/Llama-3.1-SuperNova-Lite-Q6_K_L.gguf"
 
-        MODEL_NAME="Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"
-        MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"
+        MODEL_NAME="Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf"
+        MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf"
 
         # MODEL_NAME="Qwen2.5-14B-Instruct-IQ3_XS.gguf"
         # MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-IQ3_XS.gguf"

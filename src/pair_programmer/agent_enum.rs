@@ -8,7 +8,7 @@ use crate::pair_programmer::{agent_planner::PlannerAgent,
 use async_trait::async_trait;
 use actix_web::Error as ActixError;
 use crate::llm_stream::types::AccumulatedStream;
-
+use reqwest::Client;
 pub enum AgentEnum {
     GenerateCode(Box<dyn Agent>),
     NativeLLM(Box<dyn Agent>),
@@ -83,14 +83,14 @@ impl Agent for AgentEnum {
         }
     }
 
-    async fn execute(&self) -> Result<AccumulatedStream, ActixError> {
+    async fn execute(&self, client: &Client) -> Result<AccumulatedStream, ActixError> {
         match self {
-            AgentEnum::GenerateCode(agent) => agent.execute().await,
-            AgentEnum::NativeLLM(agent) => agent.execute().await,
-            AgentEnum::Planner(agent) => agent.execute().await,
-            AgentEnum::Rethinker(agent) => agent.execute().await,
-            AgentEnum::SystemCode(agent) => agent.execute().await,
-            AgentEnum::Chat(agent) => agent.execute().await,
+            AgentEnum::GenerateCode(agent) => agent.execute(&client).await,
+            AgentEnum::NativeLLM(agent) => agent.execute(&client).await,
+            AgentEnum::Planner(agent) => agent.execute(&client).await,
+            AgentEnum::Rethinker(agent) => agent.execute(&client).await,
+            AgentEnum::SystemCode(agent) => agent.execute(&client).await,
+            AgentEnum::Chat(agent) => agent.execute(&client).await,
 
         }
     }

@@ -16,7 +16,7 @@ use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
 use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 use futures::StreamExt; // Ensure StreamExt is imported
 use crate::session_manager::check_session;
-
+use reqwest::Client;
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -73,6 +73,7 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
     data: web::Json<GenerateStepsRequest>,
+    client: web::Data<Client>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
 
@@ -109,6 +110,7 @@ pub async fn pair_programmer_generate_steps(
 
     // Start streaming and sending data to the client
     let response = stream_to_client(
+        &client,
         agent,
         pair_programmer_id.clone(),
         accumulated_content_clone,
@@ -145,7 +147,7 @@ async fn get_steps(path: web::Path<String>) -> Result<HttpResponse, Error> {
 
 
 #[post("/pair-programmer/steps/execute")]
-pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
     let data = web::Json::<ExecuteStepRequest>::from_request(&req, &mut payload.into_inner()).await;
     let valid_data = match data {
         Ok(valid_data) => {
@@ -191,6 +193,7 @@ pub async fn execute_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
 
     // Start streaming and sending data to the client
     let response = stream_to_client(
+        &client, 
         agent,
         pair_programmer_id.clone(),
         accumulated_content_clone,
@@ -277,7 +280,7 @@ pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<Htt
 }
 
 #[post("/pair-programmer/steps/chat")]
-pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
     let data: Result<web::Json<ChatStepRequest>, Error> = web::Json::<ChatStepRequest>::from_request(&req, &mut payload.into_inner()).await;
     let valid_data = match data {
         Ok(valid_data) => {
@@ -325,6 +328,7 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
 
     // Start streaming and sending data to the client
     let response = stream_to_client(
+        &client,
         agent,
         pair_programmer_id.clone(),
         accumulated_content_clone,
@@ -343,7 +347,7 @@ pub async fn chat_step(payload: web::Payload, req: HttpRequest) -> Result<HttpRe
 
 
 #[post("/pair-programmer/steps/rethink")]
-pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
     let data: Result<web::Json<RethinkRequest>, Error> = web::Json::<RethinkRequest>::from_request(&req, &mut payload.into_inner()).await;
     let valid_data = match data {
         Ok(valid_data) => {
@@ -388,6 +392,7 @@ pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
 
     // Start streaming and sending data to the client
     let response = stream_to_client(
+        &client,
         agent,
         pair_programmer_id.clone(),
         accumulated_content_clone,
@@ -404,12 +409,13 @@ pub async fn rethink_step(payload: web::Payload, req: HttpRequest) -> Result<Htt
 }
 
 async fn stream_to_client(
+    client: &Client,
     agent: AgentEnum,
     pair_programmer_id: String,
     accumulated_content_clone: Arc<Mutex<String>>,
     tx: tokio::sync::oneshot::Sender<()>
 ) -> Result<HttpResponse, Error> {
-    let stream_result = agent.execute().await;
+    let stream_result = agent.execute(&client).await;
     let mut stream = match stream_result {
         Ok(s) => s,
         Err(e) => {

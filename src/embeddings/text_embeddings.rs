@@ -10,7 +10,7 @@ use reqwest::blocking::Client;
 use std::io::Cursor;
 use log::{info, error};
 use dirs::home_dir;
-const BASE_URL: &str = "https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2/resolve/main/";
+const BASE_URL: &str = "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/";
 
 const FILES: &[&str] = &[
     "1_Pooling/config.json",
@@ -49,7 +49,7 @@ impl EmbeddingsManager {
         }
 
         if !file_path.exists() {
-            println!("Downloading {}...", file_url);
+            info!("Downloading sentence embedding model {}...", file_url);
             let response = client.get(&url).send()?;
             if !response.status().is_success() {
                 return Err(format!("Failed to download file: {}. Status: {}", file_url, response.status()).into());
@@ -60,9 +60,9 @@ impl EmbeddingsManager {
             let mut content_reader = Cursor::new(content);
             std::io::copy(&mut content_reader, &mut dest_file)?;
 
-            println!("Downloaded: {}", file_url);
+            info!("Embedding model downloaded: {}", file_url);
         } else {
-            println!("File {} already exists, skipping download.", file_url);
+            info!("Embedding Model {} already exists, skipping download.", file_url);
         }
 
         Ok(())
@@ -81,13 +81,13 @@ impl EmbeddingsManager {
         let files_exist = FILES.iter().all(|file| save_path.join(file).exists());
 
         if !files_exist {
-            println!("Some model files are missing, downloading...");
+            info!("Embedding model files are missing, downloading...");
             if !save_path.exists() {
                 fs::create_dir_all(save_path)?;
             }
             self.download_files(save_path)?;
         } else {
-            println!("Model files already exist, skipping download.");
+            info!("Embedding Model files already exist, skipping download.");
         }
 
         Ok(())
@@ -100,7 +100,7 @@ impl EmbeddingsManager {
             .with_device(Device::Cpu)
             .create_model()?;
 
-        println!("Model loaded successfully from {}.", self.save_path.display());
+        info!("Embedding Model loaded successfully from {}.", self.save_path.display());
 
         Ok(model)
     }
@@ -122,7 +122,6 @@ static EMBEDDINGS_MODEL: Lazy<Result<Arc<Mutex<SentenceEmbeddingsModel>>, Box<dy
 
     let manager = EmbeddingsManager::new(&models_dir_str);
     let model = manager.initialize_model()?;
-    println!("Model loaded successfully.");
     Ok(Arc::new(Mutex::new(model)))
 });
 

@@ -10,15 +10,17 @@ use std::sync::{ Arc, Mutex };
 use super::types::AccumulatedStream;
 use super::remote::remote_agent_execution;
 use super::local::local_agent_execution;
+use reqwest::Client;
 
 pub async fn stream_to_chat_client(
+    client: &Client,  // Pass the client here
     session_id: &str,
     system_prompt: &str,
     full_user_prompt: &str,
     accumulated_content_clone: Arc<Mutex<String>>,
     tx: tokio::sync::oneshot::Sender<()>
 ) -> Result<HttpResponse, Error> {
-    let stream_result = handle_request(system_prompt, full_user_prompt).await;
+    let stream_result = handle_request(client, system_prompt, full_user_prompt).await;
     let mut stream = match stream_result {
         Ok(s) => s,
         Err(e) => {
@@ -72,6 +74,7 @@ pub async fn stream_to_chat_client(
 }
 
 pub async fn handle_request(
+    client: &Client,  // Pass the client here
     system_prompt: &str,
     full_user_prompt: &str
 ) -> Result<AccumulatedStream, ActixError> {
@@ -80,7 +83,7 @@ pub async fn handle_request(
             ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
         )?
     } else {
-        local_agent_execution(system_prompt, full_user_prompt).await.map_err(|e|
+        local_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
             ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
         )?
     };

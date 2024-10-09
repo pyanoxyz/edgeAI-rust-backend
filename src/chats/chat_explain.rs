@@ -7,6 +7,7 @@ use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
 use crate::context::make_context::make_context;
+use reqwest::Client;
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,7 +21,7 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 }
 
 #[post("/chat/explain")]
-pub async fn chat_explain(data: web::Json<ChatExplainRequest>, _req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data<Client>, _req: HttpRequest) -> Result<HttpResponse, Error> {
     let session_id = match check_session(data.session_id.clone()) {
         Ok(id) => id,
         Err(e) => {
@@ -81,6 +82,7 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, _req: HttpRequest
         "#;
 
     let response = stream_to_chat_client(
+        &client,
         &session_id,
         system_prompt,
         &prompt_with_context,

@@ -21,11 +21,12 @@ use serde_json::Value;
 // pub type AccumulatedStream = Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>;
 
 pub async fn local_agent_execution(
+    client: &Client,  // Pass the client here
     system_prompt: &str,
     prompt_with_context: &str
 ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>, Box<dyn StdError + Send + Sync + 'static>> {
     let llm_temperature = get_llm_temperature();
-    match local_llm_request(system_prompt, prompt_with_context, llm_temperature).await {
+    match local_llm_request(client, system_prompt, prompt_with_context, llm_temperature).await {
         Ok(stream) => {
             let formatted_stream = format_local_llm_response(stream).await;
             Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
@@ -38,12 +39,13 @@ pub async fn local_agent_execution(
 }
 
 async fn local_llm_request(
+    client: &Client,  // Pass the client here
     system_prompt: &str,
     prompt_with_context: &str,
     temperature: f64,
 
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
-    let client = Client::new();
+
     let default_prompt_template = get_default_prompt_template();
     
     //This makes the full prompt by taking the default_prompt_template that

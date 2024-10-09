@@ -8,6 +8,7 @@ use crate::llm_stream::local::local_agent_execution;
 use crate::llm_stream::remote::remote_agent_execution;
 use crate::llm_stream::types::AccumulatedStream;
 
+use reqwest::Client;
 
 
 #[async_trait]
@@ -20,7 +21,7 @@ pub trait Agent: Send + Sync {
             .replace("{user_prompt}", &self.get_user_prompt())
     }
 
-    async fn execute(&self) -> Result<AccumulatedStream, ActixError> {
+    async fn execute(&self, client: &Client) -> Result<AccumulatedStream, ActixError> {
         let _prompt = self.get_prompt();
 
         let stream: AccumulatedStream = if is_cloud_execution_mode() {
@@ -28,7 +29,7 @@ pub trait Agent: Send + Sync {
                 .await
                 .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
         } else {
-            local_agent_execution(&self.get_system_prompt(), &self.get_prompt_with_context())
+            local_agent_execution(&client, &self.get_system_prompt(), &self.get_prompt_with_context())
                 .await
                 .map_err(|e| ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string())))?
         };

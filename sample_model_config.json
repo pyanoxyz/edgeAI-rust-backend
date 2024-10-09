@@ -7,7 +7,7 @@
       "gpu_layers_offloading": 12,
       "batch_size": 1024,
       "mlock": false,
-      "mmap": true,
+      "mmap": false,
       "system_prompt": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     },
     "16": {
@@ -18,7 +18,7 @@
       "gpu_layers_offloading": 24,
       "batch_size": 8192,
       "mlock": false,
-      "mmap": true, 
+      "mmap": false, 
       "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
     },
     "24": {
@@ -29,7 +29,7 @@
         "gpu_layers_offloading": -1,
         "batch_size": 8192,
         "mlock": false,
-        "mmap": true,
+        "mmap": false,
         "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
 
     },
