@@ -1,4 +1,4 @@
-use actix_web::{post, get, web, HttpRequest, HttpResponse, Error};
+use actix_web::{post, get, web, delete, HttpRequest, HttpResponse, Error};
 use serde::{Deserialize, Serialize};
 use crate::authentication::authorization::is_request_allowed;
 use log::info;
@@ -17,10 +17,18 @@ pub struct RagRequest {
 }
 
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteRequest {
+    pub session_id: Option<String>,
+    pub user_id: Option<String>,
+    pub files: Option<Vec<String>>, 
+}
+
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(rag_request)
         .service(get_indexed_context)
-        .service(fetch_similar_entries); // Register the correct route handler
+        .service(fetch_similar_entries)
+        .service(delete_rag_context);// Register the correct route handler
 }
 
 #[post("/rags/index/code")]
@@ -85,15 +93,101 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
 
 }
 
+
+#[delete("/rags/index/code")]
+pub async fn delete_rag_context(data: web::Json<DeleteRequest>, req: HttpRequest) -> Result<HttpResponse, Error> {
+    // Check if session_id, user_id, or files are missing or empty
+    if data.session_id.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "session_id is required and cannot be empty"
+        })));
+    }
+
+    if data.files.as_ref().map(|f| f.is_empty()).unwrap_or(true) {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "files array is required and cannot be empty"
+        })));
+    }
+
+    info!("Session_id = {:?}", data.session_id.clone());
+    info!("Files = {:?}", data.files.clone());
+
+    // Check session and extract user ID from the request
+    let session_id = match check_session(data.session_id.clone()) {
+        Ok(id) => id,
+        Err(e) => {
+            return Err(actix_web::error::ErrorInternalServerError(json!({
+                "error": e.to_string()
+            })));
+        }
+    };
+
+    let user_id: String = match is_request_allowed(req.clone()).await {
+        Ok(Some(user)) => user.user_id.clone(),
+        Ok(None) => data.user_id.clone().unwrap_or_else(|| "user_id".to_string()), // Set default user_id if not present
+        Err(_) => {
+            // Handle the error case by propagating the HttpResponse error
+            return Err(actix_web::error::ErrorInternalServerError(json!({
+                "error": "An error occurred during request validation"
+            })));
+        }
+    };
+
+
+    // Iterate over the files and call `delete_indexed_code` for each file path
+    for file_path in data.files.as_ref().unwrap() {
+        match DB_INSTANCE.delete_parent_context(file_path) {
+            Ok(_) => {
+                info!("Successfully deleted parent context for file: {:?}", file_path);
+            },
+            Err(e) => {
+                return Err(actix_web::error::ErrorInternalServerError(json!({
+                    "error": e.to_string()
+                })));
+            }
+        }
+
+        match DB_INSTANCE.delete_children_context_by_parent_path(&user_id, &session_id, file_path) {
+            Ok(_) => {
+                info!("Successfully deleted chunks for file: {}", file_path);
+            },
+            Err(e) => {
+                return Err(actix_web::error::ErrorInternalServerError(json!({
+                    "error": e.to_string()
+                })));
+            }
+        }
+    }
+
+    Ok(HttpResponse::Ok()
+        .insert_header(("X-Session-Id", session_id.clone())) // Add session_id in custom header
+        .json(json!({
+            "session_id": session_id,
+            "message": "Context successfully deleted"
+        })))
+}
+
+
+
+
+
 #[derive(Deserialize)]
 struct QueryParams {
-    session_id: String,
+    session_id: Option<String>,  // Make session_id an Option to handle missing field
     user_id: Option<String>,
 }
 
 #[get("/rags/index/code")]
 async fn get_indexed_context(query: web::Query<QueryParams>) -> Result<HttpResponse, Error>  {
-    let session_id = &query.session_id;
+    // Check if session_id is empty and return an error if it is
+    if query.session_id.is_none() {
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({
+                "error": "session_id is required"
+            })));
+    }
+
+    let session_id = query.session_id.as_ref().unwrap(); // Safe
     let user_id = query.user_id.as_deref().unwrap_or("user_id");
     let entries = DB_INSTANCE.fetch_session_context_files(user_id, session_id);
 

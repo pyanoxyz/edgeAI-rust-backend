@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="b3658" # Change this if the version changes
+VERSION="b3899" # Change this if the version changes
 INSTALL_DIR="$HOME/.pyano"
 BUILD_DIR="$INSTALL_DIR/build/bin"
 MODEL_DIR="$HOME/.pyano/models"
@@ -139,39 +139,48 @@ install_requirements_llama() {
 
 
 
-# Function to download and unzip if the version is not present
 download_and_unzip() {
-    # Check if curl or wget is installed and set DOWNLOAD_CMD accordingly
-    if command -v curl &> /dev/null; then
-        DOWNLOAD_CMD="curl -Lo"
-    elif command -v wget &> /dev/null; then
-        DOWNLOAD_CMD="wget -P"
-    else
-        echo "Neither curl nor wget is installed. Installing curl..."
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            sudo apt-get update && sudo apt-get install -y curl
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install curl
+    # Path to the llama-server binary
+    Llama_Server_Path="$INSTALL_DIR/build/bin/llama-server"
+
+    # Check if llama-server binary exists
+    if [[ ! -f "$Llama_Server_Path" ]]; then
+        echo "llama-server not found. Downloading and unzipping the new version..."
+
+        # Check if curl or wget is installed and set DOWNLOAD_CMD accordingly
+        if command -v curl &> /dev/null; then
+            DOWNLOAD_CMD="curl -Lo"
+        elif command -v wget &> /dev/null; then
+            DOWNLOAD_CMD="wget -P"
         else
-            echo "Unsupported OS for automatic curl installation. Please install curl or wget manually."
-            exit 1
+            echo "Neither curl nor wget is installed. Installing curl..."
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                sudo apt-get update && sudo apt-get install -y curl
+            elif [[ "$OSTYPE" == "darwin"* ]]; then
+                brew install curl
+            else
+                echo "Unsupported OS for automatic curl installation. Please install curl or wget manually."
+                exit 1
+            fi
+            DOWNLOAD_CMD="curl -Lo"
         fi
-        DOWNLOAD_CMD="curl -Lo"
-    fi
 
-    # Create the ~/.pyano/ directory if it doesn't exist
-    mkdir -p $INSTALL_DIR
+        # Create the ~/.pyano/ directory if it doesn't exist
+        mkdir -p $INSTALL_DIR
 
-    # Download the appropriate file based on the OS
-    if [[ ! -f "$INSTALL_DIR/$ZIP_FILE" ]]; then
-        echo "Downloading $ZIP_FILE..."
-        $DOWNLOAD_CMD $INSTALL_DIR/$ZIP_FILE $DOWNLOAD_URL
+        # Download the appropriate file based on the OS
+        if [[ ! -f "$INSTALL_DIR/$ZIP_FILE" ]]; then
+            echo "Downloading $ZIP_FILE..."
+            $DOWNLOAD_CMD $INSTALL_DIR/$ZIP_FILE $DOWNLOAD_URL
 
-        # Unzip the downloaded file
-        echo "Unzipping $ZIP_FILE..."
-        unzip $INSTALL_DIR/$ZIP_FILE -d $INSTALL_DIR/
+            # Unzip the downloaded file
+            echo "Unzipping $ZIP_FILE..."
+            unzip $INSTALL_DIR/$ZIP_FILE -d $INSTALL_DIR/
+        else
+            echo "$ZIP_FILE already exists, skipping download and unzip."
+        fi
     else
-        echo "$ZIP_FILE already exists, skipping download and unzip."
+        echo "llama-server already exists at $Llama_Server_Path, skipping download."
     fi
 }
 
@@ -223,15 +232,12 @@ $BUILD_DIR/llama-server \
   --n-gpu-layers $GPU_LAYERS_OFFLOADED\
   --port 52555 \
   --threads $num_cores \
-  --color \
   --metrics \
     --batch-size $BATCH_SIZE \
     --no-mmap \
-    --conversation \
     --flash-attn \
   --cache-type-k f16 \
   --cache-type-v f16 \
-   --prompt-cache-all \
    --repeat-last-n 64 \
    --repeat-penalty 1.3 \
    --top-k 40 \

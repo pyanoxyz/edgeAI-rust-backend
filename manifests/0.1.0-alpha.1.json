@@ -144,38 +144,6 @@
     },
     {
       "name": "main",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/refs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/refs/main"
-    },
-
-    {
-      "name": "ff248a5f7d76e27b10778b3c593c9fba1df4c448",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/blobs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/ff248a5f7d76e27b10778b3c593c9fba1df4c448"
-    },
-
-    {
-      "name": "9eb652ac4e40cc093272bbbe0f55d521cf67570060227109b5cdc20945a4489e",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/blobs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/9eb652ac4e40cc093272bbbe0f55d521cf67570060227109b5cdc20945a4489e"
-    },
-    {
-      "name": "68171d1ff68b731a33d119708476692c094a466b",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/blobs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/68171d1ff68b731a33d119708476692c094a466b"
-    },
-    {
-      "name": "15b9a8c3da82eddf263df571281166e00e9308fe19d077084b642ebfcaf06d2b",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/blobs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/15b9a8c3da82eddf263df571281166e00e9308fe19d077084b642ebfcaf06d2b"
-    },
-    {
-      "name": "059214673d9d6d2ee319411e2ffec8c024b816d5",
-      "path": ".pyano/models/reranker/models--BAAI--bge-reranker-base/blobs/",
-      "url": "https://downloads.pyano.network/resources/backend/reranker/models--BAAI--bge-reranker-base/blobs/059214673d9d6d2ee319411e2ffec8c024b816d5"
-    },
-    {
-      "name": "main",
       "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/",
       "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/main"
     },

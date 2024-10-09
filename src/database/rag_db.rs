@@ -21,24 +21,37 @@ impl DBConfig{
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
     pub fn store_parent_context(&self, user_id: &str, session_id: &str, parent_path: &str) {
             
+            // Lock the mutex to access the connection
+        let connection = self.connection.lock().unwrap();
+        let uuid = Uuid::new_v4().to_string();
+
+        // Get the current UTC timestamp
+        let timestamp = Utc::now().to_rfc3339();
+        connection.execute(
+            "INSERT INTO context_parent (id, user_id, session_id, parent_path, timestamp)
+                VALUES (?, ?, ?, ?, ?)",
+            params![
+                uuid,
+                user_id,
+                session_id,
+                parent_path,            
+                timestamp.as_str(),
+            ],
+        ).unwrap();
+
+    }
+    
+    pub fn delete_parent_context(&self, parent_path: &str) -> Result<(), rusqlite::Error> {
         // Lock the mutex to access the connection
-    let connection = self.connection.lock().unwrap();
-    let uuid = Uuid::new_v4().to_string();
-
-    // Get the current UTC timestamp
-    let timestamp = Utc::now().to_rfc3339();
-    connection.execute(
-        "INSERT INTO context_parent (id, user_id, session_id, parent_path, timestamp)
-            VALUES (?, ?, ?, ?, ?)",
-        params![
-            uuid,
-            user_id,
-            session_id,
-            parent_path,            
-            timestamp.as_str(),
-        ],
-    ).unwrap();
-
+        let connection = self.connection.lock().map_err(|_| rusqlite::Error::InvalidQuery)?;
+        
+        // Execute the DELETE query and return the result
+        connection.execute(
+            "DELETE FROM context_parent WHERE parent_path = ?",
+            params![parent_path],
+        )?;
+        
+        Ok(())
     }
     
     pub fn store_children_context(
@@ -96,6 +109,54 @@ impl DBConfig{
         ).unwrap();
     }
 
+
+    pub fn delete_children_context_by_parent_path(
+        &self,
+        user_id: &str,
+        session_id: &str,
+        parent_path: &str,
+    ) -> Result<(), rusqlite::Error> {
+        // Lock the mutex to access the connection
+        let mut connection = self.connection.lock().unwrap();
+    
+        // Begin a transaction to ensure both deletions are atomic
+        let tx = connection.transaction()?;    
+        // Collect `vec_row_id` within its own scope to avoid borrowing `tx` for too long
+        let vec_row_ids: Vec<u64> = {
+            let mut stmt = tx.prepare(
+                "SELECT vec_row_id FROM context_children 
+                WHERE user_id = ? AND session_id = ? AND parent_path = ?"
+            )?;
+        
+            let ids = stmt.query_map(
+                params![user_id, session_id, parent_path],
+                |row| row.get(0),
+            )?
+            .filter_map(Result::ok)
+            .collect();
+            ids
+        };
+        // Delete from `context_children` table where parent_path matches
+        tx.execute(
+            "DELETE FROM context_children 
+             WHERE user_id = ? AND session_id = ? AND parent_path = ?",
+            params![user_id, session_id, parent_path],
+        )?;
+    
+        // Delete from `context_embeddings` for the corresponding vec_row_ids
+        for row_id in vec_row_ids {
+            tx.execute(
+                "DELETE FROM context_embeddings WHERE rowid = ?",
+                params![row_id],
+            )?;
+        }
+    
+        // Commit the transaction to apply the changes
+        tx.commit()?;
+    
+        Ok(())
+    }
+    
 
     pub fn fetch_session_context_files(&self, user_id: &str, session_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection
@@ -177,7 +238,7 @@ impl DBConfig{
                     chunk_type,
                     content
                 FROM context_children
-                WHERE vec_rowid = ?
+                WHERE vec_row_id = ?
                 "#,
             )?;
     
