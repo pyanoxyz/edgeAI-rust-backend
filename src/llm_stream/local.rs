@@ -10,7 +10,7 @@ use std::error::Error as StdError;  // Importing the correct trait
 use reqwest::Error as ReqwestError;
 use futures_util::stream::TryStreamExt;
 use tokio_stream::wrappers::ReceiverStream;
-use crate::utils::{get_llm_temperature, get_local_url};
+use crate::utils::{get_llm_temperature, get_local_url, get_infill_local_url};
 use crate::platform_variables::get_default_prompt_template;
 use reqwest::Client;
 use tokio::sync::mpsc;
@@ -38,27 +38,67 @@ pub async fn local_agent_execution(
     }
 }
 
-async fn local_llm_request(
+
+pub async fn local_infill_agent_execution(
     client: &Client,  // Pass the client here
     system_prompt: &str,
-    prompt_with_context: &str,
-    temperature: f64,
+    prompt_with_context: &str
+) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>, Box<dyn StdError + Send + Sync + 'static>> {
+    let llm_temperature = get_llm_temperature();
+    match local_infill_llm_request(client, system_prompt, prompt_with_context, llm_temperature).await {
+        Ok(stream) => {
+            let formatted_stream = format_local_llm_response(stream).await;
+            Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
+        }
+        Err(e) => {
+            error!("Local LLM execution error in Pair programmer: {}", e);
+            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
+        }
+    }
+}
 
+
+async fn local_llm_request(
+    client: &Client,  
+    system_prompt: &str, 
+    prompt_with_context: &str, 
+    temperature: f64
 ) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
+    
+    let llm_server_url = get_local_url();
+    send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature).await
+}
 
+async fn local_infill_llm_request(
+    client: &Client,  
+    system_prompt: &str, 
+    prompt_with_context: &str, 
+    temperature: f64
+) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
+    
+    let llm_server_url = get_infill_local_url();
+    send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature).await
+}
+
+async fn send_llm_request(
+    client: &Client, 
+    llm_server_url: &str, 
+    system_prompt: &str, 
+    prompt_with_context: &str, 
+    temperature: f64
+) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
+    
     let default_prompt_template = get_default_prompt_template();
     
-    //This makes the full prompt by taking the default_prompt_template that
-    //depends on the LLM being used
+    // Make the full prompt
     let full_prompt = default_prompt_template
         .replace("{system_prompt}", system_prompt)
         .replace("{user_prompt}", prompt_with_context);
-
-    let llm_server_url =  get_local_url();
+    
     debug!("{} with temperature {}", full_prompt, temperature);
 
     let resp = client
-        .post(format!("{}/completions",  llm_server_url))
+        .post(format!("{}/completions", llm_server_url))
         .json(&json!({
             "prompt": full_prompt,
             "stream": true,
@@ -67,7 +107,7 @@ async fn local_llm_request(
         }))
         .send()
         .await?
-        .error_for_status()?; // Handle HTTP errors automatically
+        .error_for_status()?;  // Handle HTTP errors automatically
 
     // Create a channel for streaming the response
     let (tx, rx) = mpsc::channel(100);
@@ -81,71 +121,14 @@ async fn local_llm_request(
                 break;
             }
         }
-    
+
         if let Err(e) = stream.try_next().await {
             let _ = tx.send(Err(e)).await;
         }
     });
 
-    // Return the receiver as a stream of bytes
     Ok(ReceiverStream::new(rx))
 }
-
-
-async fn local_llm_request(
-    client: &Client,  // Pass the client here
-    system_prompt: &str,
-    prompt_with_context: &str,
-    temperature: f64,
-
-) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
-
-    let default_prompt_template = get_default_prompt_template();
-    
-    //This makes the full prompt by taking the default_prompt_template that
-    //depends on the LLM being used
-    let full_prompt = default_prompt_template
-        .replace("{system_prompt}", system_prompt)
-        .replace("{user_prompt}", prompt_with_context);
-
-    let llm_server_url =  get_local_url();
-    debug!("{} with temperature {}", full_prompt, temperature);
-
-    let resp = client
-        .post(format!("{}/completions",  llm_server_url))
-        .json(&json!({
-            "prompt": full_prompt,
-            "stream": true,
-            "temperature": temperature,
-            "cache_prompt": true
-        }))
-        .send()
-        .await?
-        .error_for_status()?; // Handle HTTP errors automatically
-
-    // Create a channel for streaming the response
-    let (tx, rx) = mpsc::channel(100);
-
-    tokio::spawn(async move {
-        let mut stream = resp.bytes_stream();
-    
-        while let Ok(Some(bytes)) = stream.try_next().await {
-            if tx.send(Ok(bytes)).await.is_err() {
-                eprintln!("Receiver dropped");
-                break;
-            }
-        }
-    
-        if let Err(e) = stream.try_next().await {
-            let _ = tx.send(Err(e)).await;
-        }
-    });
-
-    // Return the receiver as a stream of bytes
-    Ok(ReceiverStream::new(rx))
-}
-
-
 
 
 pub async fn format_local_llm_response<'a>(

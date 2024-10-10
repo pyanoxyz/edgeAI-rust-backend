@@ -110,6 +110,7 @@ pub async fn chat_testcases(data: web::Json<TestCasesRequest>, client: web::Data
         "#;
 
     let response = stream_to_chat_client(
+        RequestType::TestCases,
         &client,
         &session_id,
         system_prompt,

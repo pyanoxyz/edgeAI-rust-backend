@@ -84,6 +84,7 @@ pub async fn chat_refactor(data: web::Json<RefactorRequest>, client: web::Data<C
     "#;
 
     let response = stream_to_chat_client(
+        RequestType::Refactor,
         &client,
         &session_id,
         system_prompt,

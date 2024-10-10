@@ -97,6 +97,7 @@ pub async fn chat_find_bugs(data: web::Json<FindBugsRequest>, client: web::Data<
         "#;
 
     let response = stream_to_chat_client(
+        RequestType::FindBugs,
         &client,
         &session_id,
         system_prompt,

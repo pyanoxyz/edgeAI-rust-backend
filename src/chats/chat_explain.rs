@@ -82,6 +82,7 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
         "#;
 
     let response = stream_to_chat_client(
+        RequestType::Explain,
         &client,
         &session_id,
         system_prompt,

@@ -9,10 +9,12 @@ use std::sync::{ Arc, Mutex };
 
 use super::types::AccumulatedStream;
 use super::remote::remote_agent_execution;
-use super::local::local_agent_execution;
+use super::local::{local_agent_execution, local_infill_agent_execution};
 use reqwest::Client;
+use crate::chats::chat_types::RequestType;
 
 pub async fn stream_to_chat_client(
+    request_type: RequestType,
     client: &Client,  // Pass the client here
     session_id: &str,
     system_prompt: &str,
@@ -20,7 +22,7 @@ pub async fn stream_to_chat_client(
     accumulated_content_clone: Arc<Mutex<String>>,
     tx: tokio::sync::oneshot::Sender<()>
 ) -> Result<HttpResponse, Error> {
-    let stream_result = handle_request(client, system_prompt, full_user_prompt).await;
+    let stream_result = handle_request(request_type, client, system_prompt, full_user_prompt).await;
     let mut stream = match stream_result {
         Ok(s) => s,
         Err(e) => {
@@ -74,25 +76,39 @@ pub async fn stream_to_chat_client(
 }
 
 pub async fn handle_request(
+    request_type: RequestType,
     client: &Client,  // Pass the client here
     system_prompt: &str,
     full_user_prompt: &str
 ) -> Result<AccumulatedStream, ActixError> {
     let stream: AccumulatedStream = if is_cloud_execution_mode() {
+        // Remote agent execution for cloud mode
         remote_agent_execution(system_prompt, full_user_prompt).await.map_err(|e|
             ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
         )?
     } else {
-        local_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
-            ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
-        )?
+        // Local execution mode with different handling for INFILL and other request types
+        match request_type {
+            RequestType::Infill => {
+                // Infill request uses local_infill_agent_execution
+                local_infill_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
+                    ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
+                )?
+            },
+            _ => {
+                // All other request types use local_agent_execution
+                local_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
+                    ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
+                )?
+            }
+        }
     };
 
     // Shared state using Arc<Mutex<_>>
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
-    // Apply inspect on the stream
+    // Apply inspect on the stream to accumulate content
     let accumulated_stream = stream.inspect(move |chunk_result| {
         if let Ok(chunk) = chunk_result {
             if let Ok(chunk_str) = std::str::from_utf8(chunk) {
@@ -102,6 +118,6 @@ pub async fn handle_request(
         }
     });
 
-    // Since we cannot clone the stream, return the stream directly wrapped in a Pin
+    // Return the stream directly wrapped in a Pin
     Ok(Box::pin(accumulated_stream))
 }

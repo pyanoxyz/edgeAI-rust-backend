@@ -78,6 +78,7 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         "#;
 
     let response = stream_to_chat_client(
+        RequestType::Chat,
         &client,
         &session_id,
         system_prompt,

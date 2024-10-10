@@ -106,6 +106,7 @@ pub async fn chat_docstring(data: web::Json<DocStringRequest>, client: web::Data
             "#;
 
     let response = stream_to_chat_client(
+        RequestType::DocString,
         &client,
         &session_id,
         system_prompt,

@@ -45,8 +45,7 @@ pub async fn chat_infill(data: web::Json<InfillRequest>, client: web::Data<Clien
     let shared_session_id_clone: Arc<Mutex<String>> = Arc::clone(&shared_session_id);
 
     let prompt_with_context = format!(
-        r#"
-        Please suggest ONLY the new code or comments that would logically follow after this context:
+        r#":
         CODE BEFORE:
         {code_before}
 
@@ -67,21 +66,19 @@ pub async fn chat_infill(data: web::Json<InfillRequest>, client: web::Data<Clien
     
     //TODO: Add context
 
-    let system_prompt: &str =
-        r#"
-            You are an expert code assistant specializing in predicting and generating code based on context. Analyze the given code context, 
-            determine the programming language, and suggest the most appropriate continuation. Adhere strictly to the following instructions:
-            1. Examine the CODE BEFORE section carefully and determine the programming language. Focus on understanding the code structure and logic.
-            2. Generate only new code that logically follows the CODE BEFORE section.
-            3. Do NOT generate any comments, explanations, or extra text. Your output should contain only executable code.
-            4. Avoid repeating any part of the CODE BEFORE section. If CODE AFTER is provided, ensure the new code fits logically between CODE BEFORE and CODE AFTER.
-            5. If CODE AFTER is empty, generate a logically complete structure (function, class, etc.) following best practices, ensuring correctness and optimal performance.
-            6. Prioritize readability and maintain consistent code style and indentation.
-            7. Re-assess incomplete patterns in the CODE BEFORE section and ensure the output forms a syntactically correct and executable code snippet.
-            8. Apply patterns for progressive task-solving by incrementally refining the solution and following a "least-to-most" decompositional approach when needed (as described in the research paper).
-            "#;
+    let system_prompt: &str = r#"
+    You are an expert code assistant. Based on CODE BEFORE and CODE AFTER, generate only the missing code in between. Follow these rules:
+
+    1. Output the executable code that logically fits between CODE BEFORE and CODE AFTER.
+    2. MUST not repeat any part of CODE BEFORE. 
+    3. If CODE AFTER is empty, generate a complete, logically correct continuation beyond CODE BEFORE.
+    4. Do not stop prematurely; generate enough code to complete the function logically.
+    5. Ensure the generated code maintains consistent style, syntax, and indentation.
+    "#;
+
 
     let response = stream_to_chat_client(
+        RequestType::Infill,
         &client,
         &session_id,
         system_prompt,
