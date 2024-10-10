@@ -19,7 +19,7 @@ impl DBConfig{
     }
 
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
-    pub fn store_parent_context(&self, user_id: &str, session_id: &str, parent_path: &str) {
+    pub fn store_parent_context(&self, user_id: &str, session_id: &str, parent_path: &str, filetype: &str, category: &str) {
             
             // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
@@ -28,13 +28,15 @@ impl DBConfig{
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
         connection.execute(
-            "INSERT INTO context_parent (id, user_id, session_id, parent_path, timestamp)
-                VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO context_parent (id, user_id, session_id, parent_path, filetype, category, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)",
             params![
                 uuid,
                 user_id,
                 session_id,
-                parent_path,            
+                parent_path,
+                filetype, 
+                category,            
                 timestamp.as_str(),
             ],
         ).unwrap();
@@ -165,7 +167,7 @@ impl DBConfig{
         // Prepare a SQL query to fetch all the chats for a specific session_id and user_id, sorted by timestamp
         let mut stmt = connection
             .prepare(
-                "SELECT user_id, session_id, parent_path, timestamp 
+                "SELECT user_id, session_id, parent_path, filetype, category, timestamp 
                  FROM context_parent 
                  WHERE user_id = ? and session_id = ?
                  ORDER BY timestamp ASC",
@@ -182,7 +184,9 @@ impl DBConfig{
                     "user_id": row.get::<_, String>(0)?,  // user_id
                     "session_id": row.get::<_, String>(1)?,  // session_id
                     "path": row.get::<_, String>(2)?,  // prompt
-                    "timestamp": row.get::<_, String>(3)?,  // timestamp
+                    "filetype": row.get::<_, String>(3)?,  // prompt
+                    "category": row.get::<_, String>(4)?,  // prompt
+                    "timestamp": row.get::<_, String>(5)?,  // timestamp
                 }))
             })
             .unwrap();

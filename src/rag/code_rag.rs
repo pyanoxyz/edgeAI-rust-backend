@@ -70,68 +70,10 @@ async fn download_github_repo(repo_url: &str, temp_dir: &TempDir) -> Result<Stri
     // Clone the repository using git2
     Repository::clone(&validated_url, &repo_dir)?;
 
-    // Alternatively, you could use the Git command-line tool with tokio for async execution:
-    // Command::new("git")
-    //     .arg("clone")
-    //     .arg(&validated_url)
-    //     .arg(repo_dir.to_str().unwrap())
-    //     .status()
-    //     .await?;
-    
     // Return the path to the cloned repository
     Ok(repo_dir.to_string_lossy().to_string())
 }
 
-
-
-
-/// Asynchronously downloads a file from either a local path or a remote URL and returns the content.
-///
-/// # Arguments
-/// * `file_path` - A string slice that holds the file path or URL to read from.
-///
-/// # Returns
-/// A `Result` containing a tuple of the file path (as `String`) and file contents (as `Vec<u8>`),
-/// or a `FileReadError` if the operation fails.
-// async fn download_file(file_path: &str) -> Result<(String, Vec<u8>), FileReadError> {
-//     // Check if the file path is a URL (either HTTP or HTTPS)
-//     if file_path.starts_with("http://") || file_path.starts_with("https://") {
-//         // Parse the URL from the file path
-//         let mut url = Url::parse(file_path).map_err(FileReadError::UrlParseError)?;
-
-//         // If the URL is from GitHub and contains `/blob/`, replace `blob` with `raw` for direct file access
-//         if url.host_str() == Some("github.com") && url.path().contains("/blob/") {
-//             let path_segments: Vec<&str> = url.path().split('/').collect();
-//             let blob_index = path_segments.iter().position(|&x| x == "blob").unwrap_or(0);
-
-//             // Modify the path from blob to raw
-//             let mut modified_segments = path_segments.clone();
-//             modified_segments[blob_index] = "raw";
-//             let new_path = modified_segments.join("/");
-//             url.set_path(&new_path);
-//         }
-
-//         // Fetch the remote file using reqwest
-//         let client = Client::new();
-//         let response = client.get(url.as_str()).send().await.map_err(FileReadError::ReqwestError)?;
-
-//         // Check if the request was successful, if yes return content as Vec<u8>
-//         let response = response.error_for_status().map_err(FileReadError::ReqwestError)?;
-//         let content = response.bytes().await.map_err(FileReadError::ReqwestError)?.to_vec();
-//         return Ok((file_path.to_string(), content));
-//     } else {
-//         // If it's a local file path, check if the file exists and read its content asynchronously
-//         if std::path::Path::new(file_path).exists() {
-//             let mut file = TokioFile::open(file_path).await.map_err(FileReadError::IoError)?;
-//             let mut content = Vec::new();
-//             file.read_to_end(&mut content).await.map_err(FileReadError::IoError)?;
-//             return Ok((file_path.to_string(), content));
-//         } else {
-//             // Return an error if the file is not found
-//             return Err(FileReadError::FileNotFoundError(file_path.to_string()));
-//         }
-//     }
-// }
 
 
 fn is_excluded_directory(dir_name: &str) -> bool {
@@ -225,10 +167,14 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
 
     //Storing parent files in the database, before storing individual chunks for parent in 
     //another table
-    DB_INSTANCE.store_parent_context(user_id, session_id, path);
+    // DB_INSTANCE.store_parent_context(user_id, session_id, path);
     // First, check if it's a local directory
-    if is_local_directory(path) {
 
+    let mut filetype = "";
+    let mut category = "";
+    if is_local_directory(path) {
+        filetype = "local";
+        category = "files";
         traverse_directory(path, &mut file_paths)?;
         for file_path in &file_paths {
             let chunks = parse_code.process_local_file(file_path);
@@ -238,6 +184,8 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     } 
     // Check if it's a local file
     else if Path::new(path).is_file() {
+        filetype = "local_directory";
+        category = "directories";
         // Add the file path directly to the list
         file_paths.push(path.to_string());
         println!("The path is a local file.");
@@ -247,6 +195,8 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     
     // Check if it's a remote repository
     else if is_remote_repo(path).await? {
+        filetype = "github_repo";
+        category = "git_urls";
         let temp_dir = TempDir::new()?;
 
         let repo_dir_path = download_github_repo(path, &temp_dir).await?;
@@ -261,6 +211,8 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     } 
     // Check if it's a remote file
     else if path.starts_with("http://") || path.starts_with("https://") {
+        filetype = "remote";
+        category = "files";
         file_paths.push(path.to_string());
         let result = parse_code.process_remote_file(path).await?;
         // Check if the result is Some(Vec<Chunk>)
@@ -274,6 +226,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     else {
         info!("The path is neither a local directory, file, remote repository, nor a remote file.");
     }
+    DB_INSTANCE.store_parent_context(user_id, session_id, path, filetype, category);
 
     for chunk in &all_chunks {
 

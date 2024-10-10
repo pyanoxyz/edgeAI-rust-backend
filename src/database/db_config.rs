@@ -149,6 +149,8 @@ impl DBConfig {
                 session_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
                 parent_path TEXT NOT NULL,
+                filetype TEXT, 
+                category TEXT,
                 timestamp TEXT
             );
             ",
