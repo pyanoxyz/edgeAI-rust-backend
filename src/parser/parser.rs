@@ -4,7 +4,7 @@ use log::info;
 use std::path::Path;
 use std::ffi::CString;
 use dirs::home_dir;
-use std::fs::{self, create_dir_all};
+use std::fs::create_dir_all;
 
 // Define function signatures for the `tree_sitter_LANGUAGE` functions.
 type LanguageFn = unsafe fn() -> Language;

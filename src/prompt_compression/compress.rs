@@ -1,7 +1,6 @@
 // use rust_bert::distilbert::{DistilBertConfig, DistilBertModelMaskedLM};
 use rust_bert::bert::{BertConfig, BertForMaskedLM};
 use std::error::Error;
-use log::error;
 use rust_bert::resources::{RemoteResource, ResourceProvider};
 use rust_bert::Config;
 use rust_tokenizers::tokenizer::{BertTokenizer, Tokenizer, TruncationStrategy};
@@ -9,7 +8,7 @@ use tch::{nn, Device, Tensor, no_grad};
 use std::path::Path;
 use std::fs;
 use anyhow::Result;
-use log::debug;
+use log::{info, debug, error};
 use std::fs::create_dir_all;
 use tch::IndexOp;
 use serde_json::{Value, json};
@@ -181,15 +180,15 @@ fn modify_config_file(file_path: &str, new_key: &str, new_value: bool) -> Result
 
         let updated_contents = serde_json::to_string_pretty(&config)?;
         file.write_all(updated_contents.as_bytes())?;
-        println!("Key '{}' added to the config file.", new_key);
+        info!("Key '{}' added to the config file.", new_key);
     } else {
-        println!("Key '{}' already exists. No changes made.", new_key);
+        info!("Key '{}' already exists. No changes made.", new_key);
     }
 
     Ok(())
 }
 
-fn download_and_save_model(save_path: &str) -> Result<()> {
+fn download_and_save_model(save_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Define paths for config, vocab, and weights
     let config_dest = format!("{}/bert-bert-uncased/config.json", save_path);
     let vocab_dest = format!("{}/bert-bert-uncased/vocab.txt", save_path);
@@ -215,7 +214,8 @@ fn download_and_save_model(save_path: &str) -> Result<()> {
         fs::copy(config_path, &config_dest)?;
         debug!("Config saved to {}", config_dest);
         //Ifthis key is not added to the config.json files, The model will stop giving out attention scores
-        modify_config_file(&config_dest, "output_attentions", true);
+        let _ = modify_config_file(&config_dest, "output_attentions", true)
+            .map_err(|e| format!("Failed to add output_attentions=true in config.json for model : {}", e));
 
     } else {
         debug!("Config already exists at {}. Skipping.", config_dest);
@@ -255,7 +255,9 @@ static ATTENTION_MODEL: Lazy<Result<Arc<Mutex<AttentionCalculator>>, Box<dyn Err
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert PathBuf to str"))?
         .to_string();
-    download_and_save_model(&model_dir_str).map_err(|e| anyhow::anyhow!(e))?;
+
+    let _ = download_and_save_model(&model_dir_str)
+    .map_err(|e| format!("Failed to download Attention model {}", e));
 
     let attention_calculator = AttentionCalculator::new(&model_dir_str).unwrap();
     println!("attention_calculator loaded successfully.");

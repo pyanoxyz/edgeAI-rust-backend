@@ -1,6 +1,5 @@
 
 
-use rand::Rng;
 use chrono::Utc; // For getting the current UTC timestamp
 use rusqlite::params;
 use serde_json::{json, Value};
@@ -11,10 +10,10 @@ use std::error::Error;
 
 impl DBConfig{
 
-    pub fn generate_pair_programmer_id() -> u64 {
-        let mut rng = rand::thread_rng();
-        rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
-    }
+    // pub fn generate_pair_programmer_id() -> u64 {
+    //     let mut rng = rand::thread_rng();
+    //     rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
+    // }
 
     // Function to store a new chat record with embeddings, timestamp, and compressed prompt
     pub fn store_new_pair_programming_session(
@@ -183,31 +182,31 @@ impl DBConfig{
         Ok(formatted_string)
     }
 
-    pub fn get_step_chat(&self, pair_programmer_id: &str, step_number: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
-        // Lock the mutex to access the connection
-        let connection = self.pair_programmer_connection.lock().unwrap();
-        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    // pub fn get_step_chat(&self, pair_programmer_id: &str, step_number: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    //     // Lock the mutex to access the connection
+    //     let connection = self.pair_programmer_connection.lock().unwrap();
+    //     let step_id = format!("{}_{}", pair_programmer_id, step_number);
     
-        // Fetch the current chat from the step
-        let mut stmt = connection.prepare("SELECT chat FROM pair_programmer_steps WHERE id = ?1")?;
-        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+    //     // Fetch the current chat from the step
+    //     let mut stmt = connection.prepare("SELECT chat FROM pair_programmer_steps WHERE id = ?1")?;
+    //     let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
     
-        // Deserialize the chat history from the JSON string
-        let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+    //     // Deserialize the chat history from the JSON string
+    //     let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
     
-        // Create a vector of JSON values where each element contains the prompt and response
-        let chat_vector: Vec<Value> = chat_history
-            .into_iter()
-            .map(|chat| {
-                json!({
-                    "prompt": chat.prompt,
-                    "response": chat.response
-                })
-            })
-            .collect();
+    //     // Create a vector of JSON values where each element contains the prompt and response
+    //     let chat_vector: Vec<Value> = chat_history
+    //         .into_iter()
+    //         .map(|chat| {
+    //             json!({
+    //                 "prompt": chat.prompt,
+    //                 "response": chat.response
+    //             })
+    //         })
+    //         .collect();
     
-        // Return the vector of chat history
-        Ok(chat_vector)
-    }
+    //     // Return the vector of chat history
+    //     Ok(chat_vector)
+    // }
 
 }

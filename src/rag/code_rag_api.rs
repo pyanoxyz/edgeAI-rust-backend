@@ -1,7 +1,7 @@
 use actix_web::{post, get, web, delete, HttpRequest, HttpResponse, Error};
 use serde::{Deserialize, Serialize};
 use crate::authentication::authorization::is_request_allowed;
-use log::info;
+use log::{info, error};
 use crate::session_manager::check_session;
 use serde_json::json;
 use crate::rag::code_rag::index_code;
@@ -62,6 +62,7 @@ pub async fn rag_request(data: web::Json<RagRequest>, req: HttpRequest) -> Resul
         }
         Err(error_response) => {
             // Handle the error case by propagating the HttpResponse error
+            error!("Error in rag_request {:?}", error_response);
             return Err(actix_web::error::ErrorInternalServerError(json!({
                 "error": "An error occurred during request validation"
             })));
@@ -168,9 +169,6 @@ pub async fn delete_rag_context(data: web::Json<DeleteRequest>, req: HttpRequest
 }
 
 
-
-
-
 #[derive(Deserialize)]
 struct QueryParams {
     session_id: Option<String>,  // Make session_id an Option to handle missing field
@@ -205,13 +203,12 @@ async fn get_indexed_context(query: web::Query<QueryParams>) -> Result<HttpRespo
 struct FetchContextRequest {
     session_id: String,
     query: String,
-    user_id: Option<String>
 }
 
 #[post("/rags/index/fetch-context")]
 async fn fetch_similar_entries(
-    req: HttpRequest,
     data: web::Json<FetchContextRequest>,
+    _req: HttpRequest
 ) -> Result<HttpResponse, Error> { 
 
     if data.session_id.is_empty() {

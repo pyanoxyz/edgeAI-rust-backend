@@ -69,7 +69,7 @@ pub async fn stream_to_chat_client(
     // Return the response as a streaming body
     let response = HttpResponse::Ok()
         .content_type("application/json")
-        .append_header(("X-Session-ID", session_id.clone())) // Add the header here
+        .append_header(("X-Session-ID", session_id)) // Add the header here
         .streaming(response_stream);
 
     Ok(response)

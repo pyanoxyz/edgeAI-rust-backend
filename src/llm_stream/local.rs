@@ -136,14 +136,14 @@ pub async fn format_local_llm_response<'a>(
 ) -> impl Stream<Item = Result<Bytes, ReqwestError>> + 'a {
     let acc = String::new(); // Initialize accumulator
 
-    unfold((stream, acc), move |(mut stream, mut acc)| {
+    unfold((stream, acc), move |(mut stream, acc)| {
 
         async move {
             if let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
                         if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
-                            let  content_to_stream = process_chunk(chunk_str, &acc).await;
+                            let  content_to_stream = process_chunk(chunk_str).await;
 
                             if !content_to_stream.is_empty() {
                                 return Some((Ok(Bytes::from(content_to_stream)), (stream, acc)));
@@ -167,7 +167,7 @@ pub async fn format_local_llm_response<'a>(
     })
 }
 /// Process each chunk of the stream, extracting content and accumulating it
-async fn process_chunk(chunk_str: &str, acc: &str) -> String {
+async fn process_chunk(chunk_str: &str) -> String {
     let mut content_to_stream = String::new();
 
     for line in chunk_str.lines() {

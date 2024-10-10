@@ -6,7 +6,7 @@ use zerocopy::AsBytes;
 use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
 use rand::Rng;
-use rusqlite::{params, Error as RusqliteError};
+use rusqlite::params;
 use bytemuck::cast_slice;
 use std::error::Error;
 

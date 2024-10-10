@@ -49,9 +49,9 @@ pub trait Agent: Send + Sync {
         Ok(Box::pin(accumulated_stream))
     }
 
-    fn to_string(&self) -> String {
-        format!("Agent(name='{}')", self.get_name())
-    }
+    // fn to_string(&self) -> String {
+    //     format!("Agent(name='{}')", self.get_name())
+    // }
 
     // Helper methods that concrete types must implement
     fn get_name(&self) -> String;

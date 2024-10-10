@@ -1,7 +1,7 @@
 use std::error::Error;
-use log::{debug, error};
+use log::error;
 use dirs::home_dir;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use fastembed::{TextRerank, RerankInitOptions, RerankerModel, RerankResult};
 use std::sync::{Mutex, Arc};
 use once_cell::sync::Lazy;
@@ -57,7 +57,7 @@ static RERANK_MANAGER: Lazy<Result<Arc<Mutex<RerankManager>>, Box<dyn Error + Se
         .to_string();
 
     let mut model_manager: RerankManager = RerankManager::new(&rerank_dir_str);
-    model_manager.load_model();
+    model_manager.load_model().map_err(|e| format!("Failed to load Reranker model: {}", e))?;
     Ok(Arc::new(Mutex::new(model_manager)))
 });
 

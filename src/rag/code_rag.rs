@@ -1,8 +1,7 @@
 use regex::Regex;
 use std::error::Error;
-use reqwest::Error as ReqwestError;
 use std::fs;
-use url::{Url, ParseError as UrlParseError};
+use url::Url;
 use tempfile::TempDir;
 use reqwest::Client;
 use std::io::{self};
@@ -13,13 +12,6 @@ use crate::parser::parse_code::{ParseCode, Chunk};
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
-#[derive(Debug)]
-enum FileReadError {
-    IoError(io::Error),
-    ReqwestError(ReqwestError),
-    UrlParseError(UrlParseError),
-    FileNotFoundError(String),
-}
 
 #[derive(Debug)]
 struct InvalidGitURLError(String);
