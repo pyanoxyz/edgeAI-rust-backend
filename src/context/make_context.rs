@@ -66,14 +66,7 @@ async fn generate_prompt_embeddings(prompt: &str) -> Result<Vec<f32>, Box<dyn Er
 ///
 /// # Returns
 /// A vector of tuples (rowid, distance, prompt, compressed_prompt_response), or an error.
-async fn query_nearest_embeddings(embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String)>, Box<dyn Error>> {
-    // match DB_INSTANCE.query_nearest_embeddings(embeddings.clone(), limit) {
-    //     Ok(context) => Ok(context),
-    //     Err(e) => {
-    //         error!("Failed to query nearest embeddings: {}", e);
-    //         Err(e.into())
-    //     }
-    // }
+async fn query_nearest_chat_embeddings(embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>, Box<dyn Error>> {
 
     let (chats, duration) = measure_time_async(|| async {
         DB_INSTANCE.query_nearest_embeddings(embeddings.clone(), limit)
@@ -100,7 +93,7 @@ async fn query_nearest_embeddings(embeddings: Vec<f32>, limit: usize) -> Result<
 ///
 /// # Returns
 /// A vector of tuples (file_path, chunk_type, content), or an error.
-async fn query_session_context(embeddings: Vec<f32>, limit: usize) -> Result<Vec<(String, String, String)>, Box<dyn Error>> {
+async fn query_session_context(embeddings: Vec<f32>, limit: usize) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
     // match DB_INSTANCE.query_session_context(embeddings, limit) {
     //     Ok(context) => {
     //         info!("Nearest embeddings from the database {:?}", context);
@@ -134,17 +127,19 @@ async fn query_session_context(embeddings: Vec<f32>, limit: usize) -> Result<Vec
 /// * `rag_context` - The session context (file path, content, etc.).
 /// * `query_context` - The nearest embeddings queries.
 ///
+///
 /// # Returns
 /// A formatted string combining the context.
-fn combine_contexts(last_chats: Vec<String>, rag_context: Vec<(String, String, String)>, query_context: Vec<(i64, f64, String, String)>) -> HashSet<String> {
+fn combine_contexts(last_chats: Vec<String>, rag_context: Vec<(String, String, String, String)>, query_context: Vec<(i64, f64, String, String, String)>) -> HashSet<String> {
+    // file_path, chunk_type, content, session_id
     let formatted_context: Vec<String> = rag_context
         .iter()
-        .map(|(file_path, _, content)| format!("file_path: {}\nContent: {}", file_path, content))
+        .map(|(file_path, _, content, _)| format!("file_path: {}\nContent: {}", file_path, content))
         .collect();
 
     let nearest_queries: Vec<String> = query_context
         .iter()
-        .map(|(_, _, _, compressed_prompt_response)| compressed_prompt_response.clone())
+        .map(|(_, _, _, compressed_prompt_response, _)| compressed_prompt_response.clone())
         .collect();
 
     let mut all_context: HashSet<String> = last_chats.into_iter().collect();  // Remove duplicates
@@ -208,9 +203,17 @@ pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Resul
 
     let embeddings = generate_prompt_embeddings(prompt).await?;
 
-    let query_context = query_nearest_embeddings(embeddings.clone(), 10).await?;
-    let rag_context = query_session_context(embeddings, 10).await?;
-
+    //SQLITE vector embeddings doesnt support anyother colums execptet tor_id and embeddings
+    // as a result we are fetching around 100 nearest do cuments in all the user history
+    //and then filtering on the basis of the session_id
+    let query_context = query_nearest_chat_embeddings(embeddings.clone(), 100).await?
+                                                            .into_iter()
+                                                            .filter(|(_, _, _, _, sid)| sid == session_id)
+                                                            .collect::<Vec<_>>();
+    let rag_context = query_session_context(embeddings, 100).await?
+                                                        .into_iter()
+                                                        .filter(|(_, _, _, sid)| sid == session_id)
+                                                        .collect::<Vec<_>>();
     let all_context_set = combine_contexts(last_chats.clone(), rag_context, query_context);
     let all_context: Vec<String> = all_context_set.into_iter().collect();
 
@@ -221,6 +224,7 @@ pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Resul
     } else {
         format!("----------CONTEXT----------\n{}\nprior_chat: {}", only_pos_distance_documents, last_chats.get(0).unwrap_or(&String::new()))
     };
+    info!("Context being fed {}", result);
 
     Ok(result)
 }

@@ -203,7 +203,7 @@ impl DBConfig{
         &self,
         query_embeddings: Vec<f32>,
         limit: usize,
-    ) -> Result<Vec<(String, String, String)>, Box<dyn Error>> {
+    ) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
         // Lock the database connection safely
         let connection = self.connection.lock().map_err(|e| {
             format!("Failed to acquire lock: {}", e)
@@ -232,7 +232,7 @@ impl DBConfig{
             .collect::<Result<Vec<_>, _>>()?;
     
         // Collect context data for each nearest embedding
-        let mut context_files: Vec<(String, String, String)> = Vec::new();
+        let mut context_files: Vec<(String, String, String, String)> = Vec::new();
     
         for rowid in nearest_embeddings {
             let mut stmt = connection.prepare(
@@ -240,7 +240,8 @@ impl DBConfig{
                 SELECT
                     file_path,
                     chunk_type,
-                    content
+                    content,
+                    session_id
                 FROM context_children
                 WHERE vec_row_id = ?
                 "#,
@@ -250,7 +251,9 @@ impl DBConfig{
                 let file_path: String = row.get(0)?;
                 let chunk_type: String = row.get(1)?;
                 let content: String = row.get(2)?;
-                Ok((file_path, chunk_type, content))
+                let session_id: String = row.get(3)?;
+
+                Ok((file_path, chunk_type, content, session_id))
             })?;
     
             for context in context_iter {

@@ -223,7 +223,7 @@ impl DBConfig {
         Ok(chats)
     }
 
-    pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String)>, Box<dyn std::error::Error>> {
+    pub fn query_nearest_embeddings(&self, query_embeddings: Vec<f32>, limit: usize) -> Result<Vec<(i64, f64, String, String, String)>, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().unwrap();
         let query_embedding_bytes = cast_slice(&query_embeddings);
         // Prepare the SQL statement to find the nearest embeddings
@@ -251,14 +251,14 @@ impl DBConfig {
 
 
         // Step 2: For each rowid, collect content and file_path from context_children table, and convert to JSON.
-        let mut query_context: Vec<(i64, f64, String, String)> = Vec::new();
+        let mut query_context: Vec<(i64, f64, String, String, String)> = Vec::new();
     
            // For each nearest embedding, fetch the prompt and compressed_prompt
         for (rowid, distance) in nearest_embeddings {
             let mut stmt = connection.prepare(
                 r#"
                 SELECT
-                    prompt, compressed_prompt_response
+                    prompt, compressed_prompt_response, session_id
                 FROM chats
                 WHERE vec_row_id = ?
                 "#,
@@ -269,7 +269,9 @@ impl DBConfig {
                 .query_map(params![rowid], |row| {
                     let prompt: String = row.get(0)?;
                     let compressed_prompt: String = row.get(1)?;
-                    Ok((rowid, distance, prompt, compressed_prompt))
+                    let session_id: String = row.get(2)?;
+
+                    Ok((rowid, distance, prompt, compressed_prompt, session_id))
                 })
                 .map_err(|e| format!("Failed to execute context query: {}", e))?;
 
