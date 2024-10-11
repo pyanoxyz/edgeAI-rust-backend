@@ -61,7 +61,6 @@ static RERANK_MANAGER: Lazy<Result<Arc<Mutex<RerankManager>>, Box<dyn Error + Se
     Ok(Arc::new(Mutex::new(model_manager)))
 });
 
-
 pub async fn rerank_documents(
     query: &str,
     documents: Vec<String>,

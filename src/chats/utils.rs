@@ -87,8 +87,6 @@ pub async fn handle_stream_completion(
     }
 }
 
-
-
 /// Measures the time taken to execute an asynchronous function.
 ///
 /// # Arguments

@@ -14,7 +14,6 @@ pub struct ParserLoader {
     pub sol_lib: Library
 }
 
-
 impl ParserLoader {
     pub fn new() -> Self {
         unsafe{

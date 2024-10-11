@@ -15,7 +15,6 @@ pub struct ChatRequest {
     pub session_id: Option<String>,
 }
 
-
 pub fn register_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(chat); // Register the correct route handler
 }
@@ -62,9 +61,12 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         );
 
     let system_prompt: &str = r#"
-        You are an AI coding assistant. Your responses should be concise, instruction-tuned, and context-aware. 
+        You are an AI programming assistant. Follow the user's requirements carefully and to the letter. 
+        First, think step-by-step and describe your plan for what to build in pseudocode, written out brief description. 
+        Then, output the code in a single code block. Minimize any other prose. 
+        Take context into account if relevant.
         Context will include sections separated by '----------CONTEXT----------', which may contain code snippets, user chats, or uploaded files. 
-        Incorporate all relevant context in your responses.
+        Incorporate all relevant context in your responses.      
         
         Key guidelines:
         - Reference context, especially code, when responding.
@@ -91,7 +93,5 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
     tokio::spawn(async move {
         handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::Chat).await;
     });
-
     Ok(response)
-
 }

@@ -40,7 +40,6 @@ fn clean_and_validate_git_url(url: &str) -> Result<String, Box<dyn Error>> {
     Ok(cleaned_url)
 }
 
-
 /// Downloads a GitHub repository as a ZIP file and extracts it to a temporary directory.
 ///
 /// # Arguments
@@ -244,7 +243,6 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     Ok(all_chunks)
 }
 
-
 async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
     let embeddings_result = generate_text_embedding(content).await;
     let embeddings = match embeddings_result {
@@ -253,7 +251,6 @@ async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
     };
     Some(embeddings)
 }
-
 
 async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
     let result: Result<Vec<String>, Box<dyn Error + Send + Sync>> = get_attention_scores(&chunk.content).await;

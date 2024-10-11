@@ -58,5 +58,3 @@ impl Agent for NativeLLMAgent {
         self.prompt_with_context.clone()
     }
 }
-
-

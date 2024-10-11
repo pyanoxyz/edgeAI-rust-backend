@@ -1,5 +1,5 @@
 
-use log::{debug, error};
+use log::{info, error};
 use std::pin::Pin;
 use bytes::Bytes;
 
@@ -16,9 +16,6 @@ use reqwest::Client;
 use tokio::sync::mpsc;
 use futures::stream::unfold;
 use serde_json::Value;
-
-
-// pub type AccumulatedStream = Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>;
 
 pub async fn local_agent_execution(
     client: &Client,  // Pass the client here
@@ -38,7 +35,6 @@ pub async fn local_agent_execution(
     }
 }
 
-
 pub async fn local_infill_agent_execution(
     client: &Client,  // Pass the client here
     system_prompt: &str,
@@ -51,12 +47,11 @@ pub async fn local_infill_agent_execution(
             Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
         }
         Err(e) => {
-            error!("Local LLM execution error in Pair programmer: {}", e);
+            error!("Local local_infill_llm_request error : {}", e);
             Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
         }
     }
 }
-
 
 async fn local_llm_request(
     client: &Client,  
@@ -95,7 +90,7 @@ async fn send_llm_request(
         .replace("{system_prompt}", system_prompt)
         .replace("{user_prompt}", prompt_with_context);
     
-    debug!("{} with temperature {}", full_prompt, temperature);
+    info!("{} with temperature {}", full_prompt, temperature);
 
     let resp = client
         .post(format!("{}/completions", llm_server_url))
@@ -179,6 +174,5 @@ async fn process_chunk(chunk_str: &str) -> String {
             }
         }
     }
-
     content_to_stream
 }

@@ -11,8 +11,8 @@ MODEL_DIR="$HOME/.pyano/models"
 #Path of the model where the model being used is placed.
 
 # Use environment variables or set default values
-MODEL_NAME="${MODEL_NAME:-Qwen2.5-Coder-1.5B-Instruct-IQ4_XS.gguf}"
-MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-1.5B-Instruct-IQ4_XS.gguf}"
+MODEL_NAME="${MODEL_NAME:-Qwen2.5-Coder-7B-Instruct-IQ2_M.gguf}"
+MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf}"
 CTX="${CTX_SIZE:-4192}"
 GPU_LAYERS_OFFLOADING="${GPU_LAYERS_OFFLOADING:--1}"
 BATCH_SIZE="${BATCH_SIZE:-512}"
@@ -159,15 +159,4 @@ $BUILD_DIR/llama-server \
   --ctx-size $CTX \
   --parallel 2 \
   --n-gpu-layers $GPU_LAYERS_OFFLOADING\
-  --port 52554 \
-  --threads $num_cores \
-  --metrics \
-    --batch-size $BATCH_SIZE \
-    --no-mmap \
-    --flash-attn \
-  --cache-type-k f16 \
-  --cache-type-v f16 \
-   --repeat-last-n 64 \
-   --repeat-penalty 1.3 \
-   --top-k 40 \
-   --top-p 0.9
+  --port 52554

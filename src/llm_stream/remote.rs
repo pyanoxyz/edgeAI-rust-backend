@@ -14,7 +14,6 @@ use reqwest::Client;
 use tokio::sync::mpsc;
 use crate::utils::{get_remote_url, get_cloud_api_key};
 
-
 async fn cloud_llm_response(
     system_prompt: &str,
     prompt_with_context: &str,
@@ -77,7 +76,6 @@ async fn cloud_llm_response(
     Ok(ReceiverStream::new(rx))
 }
 
-
 pub async fn remote_agent_execution(
     system_prompt: &str,
     prompt_with_context: &str,
@@ -92,4 +90,3 @@ pub async fn remote_agent_execution(
         }
     }
 }
-

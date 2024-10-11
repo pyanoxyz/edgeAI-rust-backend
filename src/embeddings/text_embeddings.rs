@@ -25,7 +25,6 @@ const FILES: &[&str] = &[
     "tokenizer_config.json",
     "vocab.txt",
 ];
-
 pub struct EmbeddingsManager {
     save_path: PathBuf,
 }

@@ -35,7 +35,6 @@ pub async fn chat_refactor(data: web::Json<RefactorRequest>, client: web::Data<C
         }
     };
     
-    
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
@@ -97,7 +96,5 @@ pub async fn chat_refactor(data: web::Json<RefactorRequest>, client: web::Data<C
     tokio::spawn(async move {
         handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::Refactor).await;
     });
-
     Ok(response)
-
 }

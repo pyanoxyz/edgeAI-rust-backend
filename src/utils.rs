@@ -54,27 +54,3 @@ pub fn get_llm_temperature() -> f64 {
             0.4 // Default value if parsing fails
         })
 }
-
-
-// // Load the environment variables from a `.env` file
-// fn load_env() {
-//     let current_dir =  env::current_dir().unwrap();
-//     let top_dir = current_dir.parent().unwrap();
-//     let dotenv_path = top_dir.join(".env");
-//     dotenv::from_path(dotenv_path).ok();
-// }
-
-// pub fn get_total_ram() -> f64 {
-//     // Create a new System instance
-//     let mut system = System::new_all();
-
-//     // Refresh system information (e.g., RAM, CPU)
-//     system.refresh_memory();
-
-//     // Get total memory in kilobytes (KiB)
-//     let total_memory = system.total_memory();
-
-//     // Convert to megabytes (optional)
-//     let total_memory_gb = (total_memory as f64) / (1024.0 * 1024.0);
-//     total_memory_gb
-// }

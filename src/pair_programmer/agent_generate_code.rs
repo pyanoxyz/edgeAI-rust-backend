@@ -60,5 +60,3 @@ impl Agent for GenerateCodeAgent {
         self.prompt_with_context.clone()
     }
 }
-
-

@@ -66,5 +66,3 @@ impl Agent for RethinkerAgent {
         self.prompt_with_context.clone()
     }
 }
-
-

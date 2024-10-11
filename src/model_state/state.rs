@@ -3,9 +3,6 @@ use std::sync::{ Arc, Mutex };
 use tokio::task::JoinHandle;
 use serde::{Deserialize, Serialize};
 
-
-
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ConfigSection {
     pub model_name: String,

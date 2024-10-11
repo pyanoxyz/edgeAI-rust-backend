@@ -71,5 +71,3 @@ impl Agent for PlannerAgent {
         self.prompt_with_context.clone()
     }
 }
-
-

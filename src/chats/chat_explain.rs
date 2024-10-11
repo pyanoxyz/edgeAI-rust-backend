@@ -95,7 +95,5 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
     tokio::spawn(async move {
         handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::Explain).await;
     });
-
     Ok(response)
-
 }

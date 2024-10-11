@@ -119,7 +119,5 @@ pub async fn chat_docstring(data: web::Json<DocStringRequest>, client: web::Data
     tokio::spawn(async move {
         handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::DocString).await;
     });
-
     Ok(response)
-
 }

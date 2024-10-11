@@ -1,5 +1,3 @@
-
-
 use crate::database::db_config::DBConfig;
 use uuid::Uuid;
 use zerocopy::AsBytes;
@@ -11,7 +9,6 @@ use bytemuck::cast_slice;
 use std::error::Error;
 
 impl DBConfig{
-
 
     pub fn generate_rowid() -> u64 {
         let mut rng = rand::thread_rng();
@@ -263,13 +260,6 @@ impl DBConfig{
     
         Ok(context_files)
     }
-    
-    // let result = stmt.query_map(
-    //     params![query_embeddings.as_bytes(), limit as i64], 
-    //     |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))  // Get the ID and similarity score
-    // )?.collect::<Result<Vec<_>, _>>()?;
 
-    // Ok(result)
-    // }
 
 }

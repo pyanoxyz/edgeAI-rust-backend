@@ -60,8 +60,6 @@ pub async fn chat_infill(data: web::Json<InfillRequest>, client: web::Data<Clien
     let shared_prompt = Arc::new(Mutex::new(prompt_with_context.clone()));
     let shared_prompt_clone = Arc::clone(&shared_prompt);
 
-
-
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     
     //TODO: Add context
@@ -75,7 +73,6 @@ pub async fn chat_infill(data: web::Json<InfillRequest>, client: web::Data<Clien
     4. Do not stop prematurely; generate enough code to complete the function logically.
     5. Ensure the generated code maintains consistent style, syntax, and indentation.
     "#;
-
 
     let response = stream_to_chat_client(
         RequestType::Infill,
@@ -91,7 +88,5 @@ pub async fn chat_infill(data: web::Json<InfillRequest>, client: web::Data<Clien
     tokio::spawn(async move {
         handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::Infill).await;
     });
-
     Ok(response)
-
 }

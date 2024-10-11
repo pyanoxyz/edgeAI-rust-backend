@@ -54,5 +54,3 @@ impl Agent for SystemCodeAgent {
         self.prompt_with_context.clone()
     }
 }
-
-

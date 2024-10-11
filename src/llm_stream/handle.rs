@@ -107,7 +107,6 @@ pub async fn handle_request(
     // Shared state using Arc<Mutex<_>>
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
-
     // Apply inspect on the stream to accumulate content
     let accumulated_stream = stream.inspect(move |chunk_result| {
         if let Ok(chunk) = chunk_result {
@@ -117,7 +116,6 @@ pub async fn handle_request(
             }
         }
     });
-
     // Return the stream directly wrapped in a Pin
     Ok(Box::pin(accumulated_stream))
 }

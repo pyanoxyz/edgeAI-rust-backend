@@ -11,8 +11,8 @@
       "system_prompt": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     },
     "16": {
-      "model_name": "Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
-      "model_url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
+      "model_name": "Qwen2.5-14B-Instruct-IQ3_XS.gguf",
+      "model_url": "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-IQ3_XS.gguf",
       "model_size": 8.1,
       "ctx_size": 20000,
       "gpu_layers_offloading": 24,

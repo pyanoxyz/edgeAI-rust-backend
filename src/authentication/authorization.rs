@@ -24,7 +24,6 @@ pub struct ProSubscription {
 }
 
 
-
 /// Function that mimics the request validation
 pub async fn is_request_allowed(req: HttpRequest) -> Result<Option<User>, HttpResponse> {
     if is_cloud_execution_mode() {        
