@@ -9,9 +9,9 @@ pub fn is_cloud_execution_mode() -> bool {
 pub fn get_local_url() -> String {
     // load_env(); // Load the .env file from the specified path
     env::var("LOCAL_URL").unwrap_or_else(|_| {
-        eprintln!(
-            "Warning: Environment variable LOCAL_URL is not set. Using default value [http://localhost:52555]"
-        );
+        // eprintln!(
+        //     "Warning: Environment variable LOCAL_URL is not set. Using default value [http://localhost:52555]"
+        // );
         "http://localhost:52555".to_string() // Default value for LOCAL_URL
     })
 }
@@ -19,10 +19,10 @@ pub fn get_local_url() -> String {
 pub fn get_infill_local_url() -> String {
     // load_env(); // Load the .env file from the specified path
     env::var("INFILL_LOCAL_URL").unwrap_or_else(|_| {
-        eprintln!(
-            "Warning: Environment variable INFILL_LOCAL_URL is not set. Using default value [http://localhost:52555]"
-        );
-        "http://localhost:52555".to_string() // Default value for LOCAL_URL
+        // eprintln!(
+        //     "Warning: Environment variable INFILL_LOCAL_URL is not set. Using default value [http://localhost:52554]"
+        // );
+        "http://localhost:52554".to_string() // Default value for LOCAL_URL
     })
 }
 
