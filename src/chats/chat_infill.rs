@@ -1,5 +1,5 @@
 use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
-use crate::llm_stream::local::format_local_llm_response;
+use crate::{ infill::state::InfillModelState, llm_stream::local::format_local_llm_response };
 use crate::llm_stream::types::AccumulatedStream;
 use serde::{ Deserialize, Serialize };
 use std::sync::{ Arc, Mutex };
@@ -34,10 +34,20 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 #[post("/chat/infill")]
 pub async fn chat_infill(
     data: web::Json<InfillRequest>,
+    infill_model_state: web::Data<Arc<InfillModelState>>,
     client: web::Data<Client>,
     _req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let infill_id = &data.infill_id;
+
+    let model_process_guard = infill_model_state.infill_model_process.lock().await;
+
+    let model_running = model_process_guard.is_some();
+    if !model_running {
+        return Ok(
+            HttpResponse::InternalServerError().json(json!({"error": "Infill model not running"}))
+        );
+    }
 
     // FIM completion prompt for Qwen2.5 coder
     let infill_prompt = format!(
