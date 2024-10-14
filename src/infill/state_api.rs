@@ -1,6 +1,6 @@
 use actix_web::{ get, web, HttpResponse, Error };
 use serde_json::json;
-use log::debug;
+use log::{debug, info};
 use std::sync::Arc;
 use crate::model_state::model_process::kill_model_process;
 use crate::infill::model_process::run_infill_server;
@@ -8,7 +8,10 @@ use crate::infill::model_process::run_infill_server;
 use crate::infill::state::InfillModelState;
 
 pub fn infill_model_state_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(mode_state).service(run_model).service(kill_model).service(restart_model);
+    cfg.service(mode_state)
+        .service(run_model)
+        .service(kill_model)
+        .service(restart_model);
 }
 
 #[get("/infill-model-state")]
@@ -96,9 +99,9 @@ async fn run_model(
     *model_process_guard = Some(handle);
 
     // Log that the script has been triggered
-    println!("Main server thread running...");
+    info!("Infill server thread running...");
 
-    Ok(HttpResponse::Ok().json(json!({"message": "Model started"})))
+    Ok(HttpResponse::Ok().json(json!({"message": "Infill Model started"})))
 }
 
 #[get("/kill-infill-model")]
@@ -111,7 +114,7 @@ async fn kill_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRespon
         Some(pid) => pid,
         None => {
             return Ok(
-                HttpResponse::BadRequest().json(json!({"message": "No running model found"}))
+                HttpResponse::BadRequest().json(json!({"message": "No running infill model found"}))
             );
         }
     };
@@ -119,14 +122,14 @@ async fn kill_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRespon
     if let Err(e) = kill_model_process(parent_pid).await {
         return Ok(
             HttpResponse::InternalServerError().json(
-                json!({"message": format!("Failed to kill model process: {}", e)})
+                json!({"message": format!("Failed to kill infill model process: {}", e)})
             )
         );
     }
 
     *model_pid_guard = None; // Reset the PID after killing the child process
     *model_process_guard = None;
-    return Ok(HttpResponse::Ok().json(json!({"message": "Model stopped successfully"})));
+    return Ok(HttpResponse::Ok().json(json!({"message": "Infill Model stopped successfully"})));
 }
 
 #[get("/restart-infill-model")]
@@ -140,7 +143,7 @@ async fn restart_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRes
         Some(pid) => pid,
         None => {
             return Ok(
-                HttpResponse::BadRequest().json(json!({"message": "No running model found"}))
+                HttpResponse::BadRequest().json(json!({"message": "No running infill model found"}))
             );
         }
     };
@@ -149,7 +152,7 @@ async fn restart_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRes
         if let Err(e) = kill_model_process(pid).await {
             return Ok(
                 HttpResponse::InternalServerError().json(
-                    json!({"message": format!("Failed to kill the model process: {}", e)})
+                    json!({"message": format!("Failed to kill the in fill model process: {}", e)})
                 )
             );
         }
@@ -188,5 +191,5 @@ async fn restart_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRes
     // Log that the script has been triggered
     println!("Main server thread running...");
 
-    Ok(HttpResponse::Ok().json(json!({"message": "Model started"})))
+    Ok(HttpResponse::Ok().json(json!({"message": "Infill Model started"})))
 }

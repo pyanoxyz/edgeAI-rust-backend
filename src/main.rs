@@ -26,7 +26,7 @@ mod llm_stream;
 mod context;
 mod infill;
 use crate::model_state::state::ModelState;
-use crate::infill::state::InfillModelState;
+use crate::infill::state::InfillModelState ;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -112,8 +112,8 @@ async fn main() -> std::io::Result<()> {
             .service(echo) // Register the POST route
             .service(json_handler) // Register the POST route for JSON
             .configure(model_state::model_state_api::model_state_routes)
-            .configure(infill::model_state_api::infill_model_state_routes)
-            .configure(chats::chat_infill_routes) // Add chat_fill routes
+            .configure(infill::infill_model_state_routes)
+            .configure(infill::infill_routes) // Add chat_fill routes
             .configure(chats::chat_plain_routes) // Add chat routes
             .configure(chats::chat_explain_routes) // Add chat explain routes
             .configure(chats::chat_refactor_routes) // Add chat refactor routes

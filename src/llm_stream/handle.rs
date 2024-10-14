@@ -9,7 +9,7 @@ use std::sync::{ Arc, Mutex };
 
 use super::types::AccumulatedStream;
 use super::remote::remote_agent_execution;
-use super::local::{local_agent_execution, local_infill_agent_execution};
+use super::local::local_agent_execution;
 use reqwest::Client;
 use crate::chats::chat_types::RequestType;
 
@@ -76,7 +76,7 @@ pub async fn stream_to_chat_client(
 }
 
 pub async fn handle_request(
-    request_type: RequestType,
+    _request_type: RequestType,
     client: &Client,  // Pass the client here
     system_prompt: &str,
     full_user_prompt: &str
@@ -88,20 +88,11 @@ pub async fn handle_request(
         )?
     } else {
         // Local execution mode with different handling for INFILL and other request types
-        match request_type {
-            RequestType::Infill => {
-                // Infill request uses local_infill_agent_execution
-                local_infill_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
-                    ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
-                )?
-            },
-            _ => {
                 // All other request types use local_agent_execution
                 local_agent_execution(client, system_prompt, full_user_prompt).await.map_err(|e|
                     ActixError::from(actix_web::error::ErrorInternalServerError(e.to_string()))
                 )?
-            }
-        }
+
     };
 
     // Shared state using Arc<Mutex<_>>

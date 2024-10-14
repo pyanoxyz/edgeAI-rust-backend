@@ -1,4 +1,4 @@
-use log::debug;
+use log::{info, error};
 use dirs::home_dir;
 use tokio::io::{ AsyncBufReadExt, BufReader };
 use tokio::process::Command as tokio_command;
@@ -20,8 +20,15 @@ pub async fn run_infill_server<F>(callback: F, reset_state_callback: impl Fn() -
 
     // Retrieves the current working directory of the process
     let scripts_dir = home_dir.join(".pyano/scripts");
-
+    
     let script_path = scripts_dir.join("run-infill-model.sh");
+
+    // Check if the script exists
+    if !script_path.exists() {
+        error!("Script not found at path: {:?}", script_path);
+        reset_state_callback();
+        return;
+    }
 
     // Spawns a new child process to run the shell script using `bash`, passing environment variables from the selected config
     let mut child = match
@@ -33,36 +40,49 @@ pub async fn run_infill_server<F>(callback: F, reset_state_callback: impl Fn() -
             .spawn()
     {
         Ok(child) => {
-            println!("Infill Model process started successfully.");
+            info!("Infill Model process started successfully.");
 
             child
         }
         Err(e) => {
-            eprintln!("Failed to start Infill model process: {}", e);
+            error!("Failed to start Infill model process: {}", e);
             reset_state_callback();
             return; // Exit if process can't be started
         }
     };
 
-    debug!("Starting infill model");
-    let pid = child.id();
+    // Capture the process ID and invoke the callback
+    if let Some(pid) = child.id() {
+        info!("Infill Model process ID: {}", pid);
+        callback(Some(pid));
+    } else {
+        callback(None);
+    }
 
-    debug!("Infill Model process ID: {}", pid.unwrap());
-    callback(pid);
+      // Capture and process the output in real-time
+      if let Some(stdout) = child.stdout.take() {
+        let reader = BufReader::new(stdout);
+        let mut lines = reader.lines();
 
-    // Capture and process the output in real-time
-    let stdout = child.stdout.take().unwrap();
-    let reader = BufReader::new(stdout);
-    let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap_or(None) {
+            info!("Infill Model output: {}", line);
+        }
+    }
 
-    while let Some(line) = lines.next_line().await.unwrap() {}
+
+    // // Capture and process the output in real-time
+    // let stdout = child.stdout.take().unwrap();
+    // let reader = BufReader::new(stdout);
+    // let mut lines = reader.lines();
+
+    // while let Some(line) = lines.next_line().await.unwrap() {}
 
     // Wait for the process to finish (don't await child directly, use .wait().await)
     // child.wait().await.expect("Failed to wait on llama.cpp server process");
     match child.wait().await {
         Ok(status) => {
             reset_state_callback();
-            println!("Infill Model process completed with status: {}", status);
+            info!("Infill Model process completed with status: {}", status);
         }
         Err(e) => {
             reset_state_callback();

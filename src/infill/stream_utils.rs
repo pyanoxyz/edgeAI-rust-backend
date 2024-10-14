@@ -1,100 +1,22 @@
-use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
-use crate::{ infill::state::InfillModelState, llm_stream::local::format_local_llm_response };
-use crate::llm_stream::types::AccumulatedStream;
-use serde::{ Deserialize, Serialize };
-use std::sync::{ Arc, Mutex };
-use serde_json::{ json, Value };
-use reqwest::Client;
-use async_stream::stream;
 
 use log::error;
 use std::pin::Pin;
 use bytes::Bytes;
-use actix_web::Error as ActixError;
-
-use futures::{ Stream, StreamExt }; // Ensure StreamExt is imported
-use std::error::Error as StdError; // Importing the correct trait
+use std::error::Error as StdError;  // Importing the correct trait
 use reqwest::Error as ReqwestError;
 use futures_util::stream::TryStreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use crate::utils::get_infill_local_url;
+use reqwest::Client;
 use tokio::sync::mpsc;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InfillRequest {
-    pub code_before: String,
-    pub code_after: String,
-    pub infill_id: String,
-}
-
-pub fn register_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(chat_infill); // Register the correct route handler
-}
-
-#[post("/chat/infill")]
-pub async fn chat_infill(
-    data: web::Json<InfillRequest>,
-    infill_model_state: web::Data<Arc<InfillModelState>>,
-    client: web::Data<Client>,
-    _req: HttpRequest
-) -> Result<HttpResponse, Error> {
-    let infill_id = &data.infill_id;
-
-    let model_process_guard = infill_model_state.infill_model_process.lock().await;
-
-    let model_running = model_process_guard.is_some();
-    if !model_running {
-        return Ok(
-            HttpResponse::InternalServerError().json(json!({"error": "Infill model not running"}))
-        );
-    }
-
-    // FIM completion prompt for Qwen2.5 coder
-    let infill_prompt = format!(
-        r#"<|fim_prefix|>{code_before_cursor}<|fim_suffix|>{code_after_cursor}<|fim_middle|>"#,
-        code_before_cursor = &data.code_before,
-        code_after_cursor = &data.code_after
-    );
-    // adjust below keys according to how model is loaded and the type of model is being used
-    // settings for model: Qwen2.5 Coder 7b instruct
-    let infill_req_body =
-        json!({
-        "max_tokens": 2048,
-        "temperature": 0.8,
-        // "t_max_predict_ms": 2500,
-        "stream": true,
-        "stop": [
-            "<|endoftext|>",
-            "<|fim_prefix|>",
-            "<|fim_middle|>",
-            "<|fim_suffix|>",
-            "<|fim_pad|>",
-            "<|repo_name|>",
-            "<|file_sep|>",
-            "<|im_start|>",
-            "<|im_end|>",
-            "\n\n",
-            "\r\n\r\n",
-            "/src/",
-            "#- coding: utf-8",
-            "```",
-            "\nfunction",
-            "\nclass",
-            "\nmodule",
-            "\nexport",
-            "\nimport"
-        ],
-        "prompt": infill_prompt
-    });
-
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-
-    // Adding context for the infill will increase generation time
-
-    let response = stream_infill_request(&client, &infill_id, infill_req_body, tx).await?;
-
-    Ok(response)
-}
+use actix_web::{ web, HttpResponse, Error };
+use futures::{Stream, StreamExt}; // Ensure StreamExt is imported
+use std::sync::{ Arc, Mutex };
+use async_stream::stream;
+use serde_json::Value;
+use actix_web::Error as ActixError;
+use crate::llm_stream::types::AccumulatedStream;
+use crate::llm_stream::local::format_local_llm_response;
 
 pub async fn stream_infill_request(
     client: &Client, // Pass the client here
@@ -151,24 +73,6 @@ pub async fn stream_infill_request(
     Ok(response)
 }
 
-pub async fn infill_agent_execution(
-    client: &Client,
-    infill_req_body: Value
-) -> Result<
-    Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>,
-    Box<dyn StdError + Send + Sync + 'static>
-> {
-    match send_llm_request(client, infill_req_body).await {
-        Ok(stream) => {
-            let formatted_stream = format_local_llm_response(stream).await;
-            Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
-        }
-        Err(e) => {
-            error!("Infill execution error: {}", e);
-            Err(e.into()) // Use `into()` to convert the error directly into `Box<dyn StdError>`
-        }
-    }
-}
 
 pub async fn handle_infill_request(
     client: &Client,
@@ -193,7 +97,26 @@ pub async fn handle_infill_request(
     Ok(Box::pin(accumulated_stream))
 }
 
-pub async fn send_llm_request(
+pub async fn infill_agent_execution(
+    client: &Client,
+    infill_req_body: Value
+) -> Result<
+    Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>,
+    Box<dyn StdError + Send + Sync + 'static>
+> {
+    match send_infill_request(client, infill_req_body).await {
+        Ok(stream) => {
+            let formatted_stream = format_local_llm_response(stream).await;
+            Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
+        }
+        Err(e) => {
+            error!("Infill execution error: {}", e);
+            Err(e.into()) // Use `into()` to convert the error directly into `Box<dyn StdError>`
+        }
+    }
+}
+
+pub async fn send_infill_request(
     client: &Client,
     infill_req_body: Value
 ) -> Result<
