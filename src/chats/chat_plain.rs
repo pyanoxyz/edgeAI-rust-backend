@@ -88,6 +88,7 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         accumulated_content_clone,
         tx,
     ).await?;
+    println!("{:?}", &accumulated_content);
     // Spawn a separate task to handle the stream completion
     // Ensure the main async task is spawned correctly
     tokio::spawn(async move {

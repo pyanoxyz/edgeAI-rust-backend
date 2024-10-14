@@ -17,6 +17,7 @@ pub async fn handle_stream_completion(
 ) {
     if let Ok(_) = rx.await {
         let accumulated_content_final = accumulated_content.lock().unwrap().clone();
+
         // let summary = summarize_text(&accumulated_content_final).await.unwrap();
         let prompt = match ts_prompt.lock() {
             Ok(locked_prompt) => locked_prompt.clone(),

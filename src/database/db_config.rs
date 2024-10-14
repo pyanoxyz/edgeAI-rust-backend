@@ -58,7 +58,7 @@ impl DBConfig {
         db_config.create_pair_programmer_table();
         db_config.create_config_table();
 
-        db_config.run_migrations();
+        // db_config.run_migrations();
 
         db_config
     }

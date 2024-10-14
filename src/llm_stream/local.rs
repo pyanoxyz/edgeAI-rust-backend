@@ -4,6 +4,7 @@ use std::pin::Pin;
 use bytes::Bytes;
 
 use serde_json::json;
+use serde::Deserialize;
 
 use futures::{Stream, StreamExt}; // Ensure StreamExt is imported
 use std::error::Error as StdError;  // Importing the correct trait
@@ -16,6 +17,20 @@ use reqwest::Client;
 use tokio::sync::mpsc;
 use futures::stream::unfold;
 use serde_json::Value;
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct LLMGenerattionTimings {
+    predicted_ms: f64,
+    predicted_n: f64,
+    predicted_per_second: f64,
+    predicted_per_token_ms: f64,
+    prompt_ms: f64,
+    prompt_n: f64,
+    prompt_per_second: f64,
+    prompt_per_token_ms: f64,
+}
+
 
 pub async fn local_agent_execution(
     client: &Client,  // Pass the client here
@@ -141,10 +156,25 @@ async fn process_chunk(chunk_str: &str) -> String {
         if line.starts_with("data: ") {
             if let Ok(json_data) = serde_json::from_str::<Value>(&line[6..]) {
                 if let Some(content) = json_data.get("content").and_then(|c| c.as_str()) {
+
                     content_to_stream.push_str(content);    // Stream content
+                }
+                if let Some(timings) = json_data.get("timings") {
+                    if let Ok(timing_struct) = serde_json::from_value::<LLMGenerattionTimings>(timings.clone()) {
+                        let tokens_per_second = calculate_tokens_per_second(
+                            timing_struct.predicted_n, 
+                            timing_struct.predicted_ms
+                        );
+                        info!("Tokens generated per second: {:.2}", tokens_per_second);
+                    }
                 }
             }
         }
     }
     content_to_stream
+}
+
+fn calculate_tokens_per_second(predicted_n: f64, predicted_ms: f64) -> f64 {
+    let predicted_seconds = predicted_ms / 1000.0;
+    predicted_n / predicted_seconds
 }
