@@ -2,7 +2,7 @@ use actix_web::{ get, web, HttpResponse, Error };
 use serde_json::json;
 use log::debug;
 use std::sync::Arc;
-use crate::model_state::model_process::{ kill_model_process, run_llama_server };
+use crate::model_state::model_process::{ kill_model_process, run_llama_server};
 use sysinfo::{ ProcessExt, System, SystemExt };
 use serde::Deserialize;
 use tokio::time::{ sleep, Duration, Instant }; // Import sleep and Duration from tokio
@@ -54,6 +54,8 @@ pub async fn mode_state(
         )
     }
 }
+
+
 
 #[get("/run-model")]
 //The key component in this function is the data: web::Data<Arc<ModelState>> parameter. 
@@ -108,8 +110,6 @@ async fn run_model(
 #[get("/model-config")]
 async fn model_config() -> Result<HttpResponse, Error> {
     // Use into_inner to get the inner String from the Path extractors
-
-
     // Return the result as JSON
     match DB_INSTANCE.get_model_config() {
         Ok(config) => {

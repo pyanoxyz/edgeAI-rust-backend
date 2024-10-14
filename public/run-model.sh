@@ -2,7 +2,7 @@
 
 
 #this is the version of the compiled llama.cpp core, This is generally requires to support the new launched models.
-VERSION="b3899" # Change this if the version changes
+VERSION="b3912" # Change this if the version changes
 INSTALL_DIR="$HOME/.pyano"
 #This is where the compiled version of llama.cpp will be unzeipped that has llama-server binary to run llama.cpp server.
 BUILD_DIR="$INSTALL_DIR/build/bin"

@@ -10,7 +10,7 @@ use std::error::Error as StdError;  // Importing the correct trait
 use reqwest::Error as ReqwestError;
 use futures_util::stream::TryStreamExt;
 use tokio_stream::wrappers::ReceiverStream;
-use crate::utils::{get_llm_temperature, get_local_url, get_infill_local_url};
+use crate::utils::{get_llm_temperature, get_local_url};
 use crate::platform_variables::get_default_prompt_template;
 use reqwest::Client;
 use tokio::sync::mpsc;
@@ -35,24 +35,6 @@ pub async fn local_agent_execution(
     }
 }
 
-pub async fn local_infill_agent_execution(
-    client: &Client,  // Pass the client here
-    system_prompt: &str,
-    prompt_with_context: &str
-) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ReqwestError>> + Send>>, Box<dyn StdError + Send + Sync + 'static>> {
-    let llm_temperature = get_llm_temperature();
-    match local_infill_llm_request(client, system_prompt, prompt_with_context, llm_temperature).await {
-        Ok(stream) => {
-            let formatted_stream = format_local_llm_response(stream).await;
-            Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
-        }
-        Err(e) => {
-            error!("Local local_infill_llm_request error : {}", e);
-            Err(e.into())  // Use `into()` to convert the error directly into `Box<dyn StdError>`
-        }
-    }
-}
-
 async fn local_llm_request(
     client: &Client,  
     system_prompt: &str, 
@@ -64,16 +46,6 @@ async fn local_llm_request(
     send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature).await
 }
 
-async fn local_infill_llm_request(
-    client: &Client,  
-    system_prompt: &str, 
-    prompt_with_context: &str, 
-    temperature: f64
-) -> Result<impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>, Box<dyn StdError + Send + Sync + 'static>> {
-    
-    let llm_server_url = get_infill_local_url();
-    send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature).await
-}
 
 async fn send_llm_request(
     client: &Client, 

@@ -2,7 +2,7 @@
 
 
 #this is the version of the compiled llama.cpp core, This is generally requires to support the new launched models.
-VERSION="b3899" # Change this if the version changes
+VERSION="b3912" # Change this if the version changes
 INSTALL_DIR="$HOME/.pyano"
 #This is where the compiled version of llama.cpp will be unzeipped that has llama-server binary to run llama.cpp server.
 BUILD_DIR="$INSTALL_DIR/build/bin"
@@ -11,13 +11,11 @@ MODEL_DIR="$HOME/.pyano/models"
 #Path of the model where the model being used is placed.
 
 # Use environment variables or set default values
-MODEL_NAME="${MODEL_NAME:-Qwen2.5-Coder-7B-Instruct-IQ2_M.gguf}"
-MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf}"
+MODEL_NAME="${MODEL_NAME:-Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf}"
+MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf}"
 CTX="${CTX_SIZE:-4192}"
 GPU_LAYERS_OFFLOADING="${GPU_LAYERS_OFFLOADING:--1}"
 BATCH_SIZE="${BATCH_SIZE:-512}"
-MLOCK="${MLOCK:-true}"
-MMAP="${MMAP:-false}"
 MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
 
 
@@ -156,7 +154,9 @@ echo "Number of cores are  $num_cores"
 # Run the server command
 $BUILD_DIR/llama-server \
   -m $MODEL_PATH \
+  -np 8 \
   --ctx-size $CTX \
-  --parallel 2 \
+  --threads $num_cores \
+  --parallel 4 \
   --n-gpu-layers $GPU_LAYERS_OFFLOADING\
   --port 52554

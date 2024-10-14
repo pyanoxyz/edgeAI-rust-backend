@@ -6,9 +6,14 @@
       "url": "https://downloads.pyano.network/resources/backend/bin/pyano_server"
     },
     {
-      "name": "Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
+      "name": "SuperNova-Medius-IQ4_XS.gguf",
       "path": ".pyano/models/",
-      "url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf"
+      "url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf"
+    },
+    {
+      "name": "Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf"
     },
     {
       "name": "languages.so",
@@ -192,6 +197,11 @@
       "name": "run-model.sh",
       "path": ".pyano/scripts/",
       "url": "https://downloads.pyano.network/resources/backend/scripts/run-model.sh"
+    },
+    {
+      "name": "run-infill-model.sh",
+      "path": ".pyano/scripts/",
+      "url": "https://downloads.pyano.network/resources/backend/scripts/run-infill-model.sh"
     },
     {
       "name": "run-server.sh",
