@@ -1,0 +1,79 @@
+{
+  "8": {
+    "model_name": "Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
+    "model_url": "https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_L.gguf",
+    "model_size": 8.1,
+    "ctx_size": 8192,
+    "gpu_layers_offloading": 12,
+    "batch_size": 1024,
+    "mlock": false,
+    "mmap": false,
+    "system_prompt": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+  },
+  "16": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 8.1,
+    "ctx_size": 20000,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": false,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  },
+  "24": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 12.5,
+    "ctx_size": 32768,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": false,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  },
+  "32": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 12.5,
+    "ctx_size": 32768,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": true,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  },
+  "48": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 12.5,
+    "ctx_size": 32768,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": true,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  },
+  "64": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 12.5,
+    "ctx_size": 32768,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": true,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  },
+  "96": {
+    "model_name": "SuperNova-Medius-IQ4_XS.gguf",
+    "model_url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf",
+    "model_size": 12.5,
+    "ctx_size": 32768,
+    "gpu_layers_offloading": -1,
+    "batch_size": 8192,
+    "mlock": false,
+    "mmap": true,
+    "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+  }
+}

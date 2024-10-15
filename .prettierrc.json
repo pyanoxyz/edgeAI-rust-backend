@@ -1,6 +1,14 @@
 {
-    "useTabs": false,
-    "tabWidth": 4,
-    "printWidth": 100,
-    "endOfLine": "lf"
+  "useTabs": false,
+  "tabWidth": 4,
+  "printWidth": 100,
+  "endOfLine": "lf",
+  "overrides": [
+    {
+      "files": ["*.json"],
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
 }
