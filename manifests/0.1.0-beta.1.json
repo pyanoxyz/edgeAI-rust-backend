@@ -6,9 +6,9 @@
       "url": "https://downloads.pyano.network/resources/backend/bin/0.1.0-beta.1/pyano_server"
     },
     {
-      "name": "SuperNova-Medius-IQ4_XS.gguf",
+      "name": "Qwen2.5-Coder-7B-Instruct-Q6_K_L.gguf",
       "path": ".pyano/models/",
-      "url": "https://downloads.pyano.network/resources/backend/models/SuperNova-Medius-IQ4_XS.gguf"
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-7B-Instruct-Q6_K_L.gguf"
     },
     {
       "name": "Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf",
