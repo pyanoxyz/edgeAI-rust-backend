@@ -34,7 +34,6 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         }
     };
     
-    
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
@@ -69,7 +68,7 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         Incorporate all relevant context in your responses.      
         
         Key guidelines:
-        - Reference context, especially code, when responding.
+        - Reference context, especially file_path, when responding.
         - For uploaded files, integrate both the file content and prior_chat for accurate answers.
         - Offer code examples or improvements as needed.
         - Optimize responses across multiple turns, remembering context.
@@ -88,7 +87,6 @@ pub async fn chat(data: web::Json<ChatRequest>, client: web::Data<Client>, _req:
         accumulated_content_clone,
         tx,
     ).await?;
-    println!("{:?}", &accumulated_content);
     // Spawn a separate task to handle the stream completion
     // Ensure the main async task is spawned correctly
     tokio::spawn(async move {

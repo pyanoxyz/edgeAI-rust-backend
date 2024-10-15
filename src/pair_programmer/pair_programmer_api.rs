@@ -140,9 +140,12 @@ async fn get_steps(path: web::Path<String>) -> Result<HttpResponse, Error> {
 
     // Fetch the steps for the provided pair_programmer_id
     let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
-
+    let response = json!({
+        "steps": steps
+    });
     // Return the result as JSON
-    Ok(HttpResponse::Ok().json(steps))
+    Ok(HttpResponse::Ok().json(response))
+    // Return the result as JSON
 }
 
 
@@ -208,8 +211,6 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
     Ok(response)
 
 }
-
-
 
 #[post("/pair-programmer/steps/chat_summary")]
 pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
@@ -458,7 +459,7 @@ async fn stream_to_client(
     // Return the response as a streaming body
     let response = HttpResponse::Ok()
         .content_type("application/json")
-        .append_header(("pair-programmer-id", pair_programmer_id.clone())) // Add the header here
+        .append_header(("X-Pair-Programmer-id", pair_programmer_id.clone())) // Add the header here
         .streaming(response_stream);
 
     Ok(response)

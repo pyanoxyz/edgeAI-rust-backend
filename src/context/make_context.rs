@@ -137,10 +137,14 @@ fn combine_contexts(last_chats: Vec<String>, rag_context: Vec<(String, String, S
         .map(|(file_path, _, content, _)| format!("file_path: {}\nContent: {}", file_path, content))
         .collect();
 
+    info!("Context from the files {:?}", formatted_context);
+
     let nearest_queries: Vec<String> = query_context
         .iter()
         .map(|(_, _, _, compressed_prompt_response, _)| compressed_prompt_response.clone())
         .collect();
+
+    info!("Context from the chat history {:?}", nearest_queries);
 
     let mut all_context: HashSet<String> = last_chats.into_iter().collect();  // Remove duplicates
     all_context.extend(formatted_context);
@@ -168,11 +172,13 @@ async fn filter_reranked_documents(prompt: &str, all_context: Vec<String>, top_n
         rerank_documents(prompt, all_context).await
     }).await;
 
+    info!("Rerank docs resulting length {:?}", documents);
     match documents {
         Ok(docs) => {
             info!("Time elapsed in re ranking documents {:?}", duration);
+            info!("Rerank docs resulting length {:?}", docs.len());
+
             let formatted_docs = docs.into_iter()
-            .filter(|(_, _, score)| *score >= 0.0)  // Filter by positive score
             .take(top_n)                            // Take only top N
             .map(|(document, _, _)| document)       // Extract document
             .collect::<Vec<String>>()               // Collect into Vec<String>
@@ -186,7 +192,6 @@ async fn filter_reranked_documents(prompt: &str, all_context: Vec<String>, top_n
             Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))
         }
     }
-
 }
 
 /// The main function to generate the context for a given session.
@@ -218,6 +223,7 @@ pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Resul
     let all_context: Vec<String> = all_context_set.into_iter().collect();
 
     let only_pos_distance_documents = filter_reranked_documents(prompt, all_context, top_n).await?;
+    info!("Reranked documents {:?}", only_pos_distance_documents);
 
     let result = if only_pos_distance_documents.is_empty() {
         format!("prior_chat: {}", last_chats.get(0).unwrap_or(&String::new()))

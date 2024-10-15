@@ -234,7 +234,6 @@ $BUILD_DIR/llama-server \
   --threads $num_cores \
   --metrics \
     --batch-size $BATCH_SIZE \
-    --no-mmap \
     --flash-attn \
   --cache-type-k f16 \
   --cache-type-v f16 \
