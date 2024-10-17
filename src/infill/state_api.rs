@@ -1,6 +1,6 @@
 use actix_web::{ get, web, HttpResponse, Error };
 use serde_json::json;
-use log::{debug, info};
+use log::{ debug, info };
 use std::sync::Arc;
 use crate::model_state::model_process::kill_model_process;
 use crate::infill::model_process::run_infill_server;
@@ -8,10 +8,7 @@ use crate::infill::model_process::run_infill_server;
 use crate::infill::state::InfillModelState;
 
 pub fn infill_model_state_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(mode_state)
-        .service(run_model)
-        .service(kill_model)
-        .service(restart_model);
+    cfg.service(mode_state).service(run_model).service(kill_model).service(restart_model);
 }
 
 #[get("/infill-model-state")]
@@ -39,7 +36,7 @@ pub async fn mode_state(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRe
         )
     } else {
         Ok(
-            HttpResponse::BadRequest().json(
+            HttpResponse::Ok().json(
                 json!({
                 "message": "Model not started", "running": false
             })
@@ -62,7 +59,7 @@ async fn run_model(
     let model_running = model_process_guard.is_some();
     if model_running {
         return Ok(
-            HttpResponse::BadRequest().json(
+            HttpResponse::Ok().json(
                 json!({"message": "Model is already running", "pid": model_pid_guard.unwrap_or(0)})
             )
         );
@@ -113,9 +110,7 @@ async fn kill_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRespon
     let parent_pid = match *model_pid_guard {
         Some(pid) => pid,
         None => {
-            return Ok(
-                HttpResponse::BadRequest().json(json!({"message": "No running infill model found"}))
-            );
+            return Ok(HttpResponse::Ok().json(json!({"message": "No running infill model found"})));
         }
     };
     // Kill the child process

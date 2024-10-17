@@ -1,5 +1,5 @@
 use std::fs;
-use log::info;
+use log::{ info, error };
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
@@ -58,15 +58,29 @@ impl DBConfig {
         db_config.create_pair_programmer_table();
         db_config.create_config_table();
 
-        // db_config.run_migrations();
+        if let Err(e) = db_config.run_migrations() {
+            error!("Failed to run migrations: {:?}", e);
+            // Handle the error appropriately, maybe exit the program or take alternative action
+        } else {
+            info!("Migrations completed successfully");
+        }
 
         db_config
     }
 
-    pub fn run_migrations(&self) {
+    pub fn run_migrations(&self) -> Result<(), rusqlite_migration::Error> {
         let mut connection = self.connection.lock().unwrap();
         info!("Migration for connection");
-        MIGRATIONS.to_latest(&mut connection).unwrap();
+        match MIGRATIONS.to_latest(&mut connection) {
+            Ok(_) => {
+                // info!("Migrations completed successfully");
+                Ok(())
+            }
+            Err(e) => {
+                // error!("Migration failed: {:?}", e);
+                Err(e)
+            }
+        }
     }
 
     pub fn create_config_table(&self) {
