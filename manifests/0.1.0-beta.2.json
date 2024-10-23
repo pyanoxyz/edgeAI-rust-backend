@@ -1,0 +1,214 @@
+{
+  "files": [
+    {
+      "name": "pyano-server",
+      "path": ".pyano/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/0.1.0-beta.2/pyano_server"
+    },
+    {
+      "name": "Qwen2.5-Coder-7B-Instruct-Q6_K_L.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-7B-Instruct-Q6_K_L.gguf"
+    },
+    {
+      "name": "Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-1.5B-Instruct-Q6_K_L.gguf"
+    },
+    {
+      "name": "languages.so",
+      "path": ".pyano/parsers/",
+      "url": "https://downloads.pyano.network/resources/backend/parsers/languages.so"
+    },
+    {
+      "name": "solidity-language.so",
+      "path": ".pyano/parsers/",
+      "url": "https://downloads.pyano.network/resources/backend/parsers/solidity-language.so"
+    },
+    {
+      "name": "downloader",
+      "path": ".pyano/bin/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/downloader"
+    },
+    {
+      "name": "libc10.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libc10.dylib"
+    },
+    {
+      "name": "libfbjni.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libfbjni.dylib"
+    },
+    {
+      "name": "libomp.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libomp.dylib"
+    },
+    {
+      "name": "libpytorch_jni.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libpytorch_jni.dylib"
+    },
+    {
+      "name": "libshm.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libshm.dylib"
+    },
+    {
+      "name": "libtorch.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libtorch.dylib"
+    },
+    {
+      "name": "libtorch_cpu.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libtorch_cpu.dylib"
+    },
+    {
+      "name": "libtorch_global_deps.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libtorch_global_deps.dylib"
+    },
+    {
+      "name": "libtorch_python.dylib",
+      "path": ".pyano/bin/libtorch/lib/",
+      "url": "https://downloads.pyano.network/resources/backend/bin/libtorch/lib/libtorch_python.dylib"
+    },
+    {
+      "name": "config.json",
+      "path": ".pyano/models/bert-bert-uncased/",
+      "url": "https://downloads.pyano.network/resources/backend/bert-bert-uncased/config.json"
+    },
+    {
+      "name": "model.ot",
+      "path": ".pyano/models/bert-bert-uncased/",
+      "url": "https://downloads.pyano.network/resources/backend/bert-bert-uncased/model.ot"
+    },
+    {
+      "name": "vocab.txt",
+      "path": ".pyano/models/bert-bert-uncased/",
+      "url": "https://downloads.pyano.network/resources/backend/bert-bert-uncased/vocab.txt"
+    },
+    {
+      "name": "1_Pooling",
+      "path": ".pyano/models/embed_model/1_Pooling/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/1_Pooling/config.json"
+    },
+    {
+      "name": "config.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/config.json"
+    },
+    {
+      "name": "config_sentence_transformers.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/config_sentence_transformers.json"
+    },
+    {
+      "name": "data_config.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/data_config.json"
+    },
+    {
+      "name": "modules.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/modules.json"
+    },
+    {
+      "name": "rust_model.ot",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/rust_model.ot"
+    },
+    {
+      "name": "sentence_bert_config.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/sentence_bert_config.json"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/special_tokens_map.json"
+    },
+    {
+      "name": "tokenizer.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/tokenizer.json"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/tokenizer_config.json"
+    },
+    {
+      "name": "vocab.txt",
+      "path": ".pyano/models/embed_model/",
+      "url": "https://downloads.pyano.network/resources/backend/embed_model/vocab.txt"
+    },
+    {
+      "name": "main",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/refs/main"
+    },
+    {
+      "name": "d5698132694f4f1bcff08fa7d937b1701812598e",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/d5698132694f4f1bcff08fa7d937b1701812598e"
+    },
+    {
+      "name": "c1296c66c119de645fa9cdee536d8637740efe85224cfa270281e50f213aa565",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/c1296c66c119de645fa9cdee536d8637740efe85224cfa270281e50f213aa565"
+    },
+    {
+      "name": "61287c716716abd7a3096ff2f74a1de6e20d589b",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/61287c716716abd7a3096ff2f74a1de6e20d589b"
+    },
+    {
+      "name": "1febe623f0d5566bf1dd91fb0641a29e122ee6e3",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/1febe623f0d5566bf1dd91fb0641a29e122ee6e3"
+    },
+    {
+      "name": "742b5d2b49f1a9222693ca4295f3226716f2f2bc",
+      "path": ".pyano/models/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/",
+      "url": "https://downloads.pyano.network/resources/backend/reranker/models--jinaai--jina-reranker-v1-turbo-en/blobs/742b5d2b49f1a9222693ca4295f3226716f2f2bc"
+    },
+    {
+      "name": "llama-server",
+      "path": ".pyano/build/bin/",
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b3952/llama-server"
+    },
+    {
+      "name": "ggml-metal.metal",
+      "path": ".pyano/build/bin/",
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b3952/ggml-metal.metal"
+    },
+    {
+      "name": "ggml-common.h",
+      "path": ".pyano/build/bin/",
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b3952/ggml-common.h"
+    },
+    {
+      "name": "run-model.sh",
+      "path": ".pyano/scripts/",
+      "url": "https://downloads.pyano.network/resources/backend/scripts/0.1.0-beta.2/run-model.sh"
+    },
+    {
+      "name": "run-infill-model.sh",
+      "path": ".pyano/scripts/",
+      "url": "https://downloads.pyano.network/resources/backend/scripts/0.1.0-beta.2/run-infill-model.sh"
+    },
+    {
+      "name": "run-server.sh",
+      "path": ".pyano/scripts/",
+      "url": "https://downloads.pyano.network/resources/backend/scripts/0.1.0-beta.2/run-server.sh"
+    },
+    {
+      "name": "model_config.json",
+      "path": ".pyano/configs/",
+      "url": "https://downloads.pyano.network/resources/backend/configs/0.1.0-beta.2/model_config.json"
+    }
+  ]
+}

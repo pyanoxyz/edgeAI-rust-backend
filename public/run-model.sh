@@ -2,7 +2,7 @@
 
 
 #this is the version of the compiled llama.cpp core, This is generally requires to support the new launched models.
-VERSION="b3912" # Change this if the version changes
+VERSION="b3952" # Change this if the version changes
 INSTALL_DIR="$HOME/.pyano"
 #This is where the compiled version of llama.cpp will be unzeipped that has llama-server binary to run llama.cpp server.
 BUILD_DIR="$INSTALL_DIR/build/bin"
@@ -157,7 +157,7 @@ echo "Number of cores are  $num_cores"
 $BUILD_DIR/llama-server \
   -m $MODEL_PATH \
   --ctx-size $CTX \
-  --parallel 2 \
+  --parallel 4 \
   --n-gpu-layers $GPU_LAYERS_OFFLOADED\
   --port 52555 \
   --threads $num_cores \
@@ -169,5 +169,6 @@ $BUILD_DIR/llama-server \
   --cache-type-v f16 \
    --repeat-last-n 64 \
    --repeat-penalty 1.3 \
-   --top-k 40 \
-   --top-p 0.9
+   --top-k 50 \
+   --top-p 0.8 \
+   --temp 0.5
