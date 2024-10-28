@@ -275,10 +275,13 @@ async fn fetch_similar_entries(
             );
         }
     };
-    let chunk_ids = search_index(&data.session_id, query_embeddings.clone());
+
+    let chunk_ids = search_index(&data.session_id, query_embeddings.clone(), 10);
 
     let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
     info!("All the matching entries {:?}", entries);
+
+
     Ok(
         HttpResponse::Ok()
             .insert_header(("X-Session-Id", data.session_id.clone())) // Add session_id in custom header

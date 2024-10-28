@@ -83,7 +83,10 @@ fn load_or_create_index(session_id: &str) -> Index {
             info!("Index load failed for session: {} with error {}", session_id, err);
         }
     };
-    index.reserve(10000000);
+    if let Err(err) = index.reserve(10000000){
+        error!("Failed to reserve memory for the index: {}", err);
+
+    }
     index
     
 }
@@ -109,13 +112,13 @@ fn save_index(index: &Index, session_id: &str) -> Result<(), String> {
     }
 }
 
-pub fn search_index(session_id: &str, query_embedding: Vec<f32>) ->  Vec<u64>{
+pub fn search_index(session_id: &str, query_embedding: Vec<f32>, items: usize) ->  Vec<u64>{
     // Load the index
     let index = load_or_create_index(session_id);
     let mut result_vec: Vec<u64> = Vec::new();
 
     // Perform the search on the index with the query embedding
-    match index.search(&query_embedding, 10) {
+    match index.search(&query_embedding, items) {
         Ok(results) => {
             info!("Found {:?} results for session: {}", results, session_id);
             for (i, result) in results.keys.into_iter().enumerate() {

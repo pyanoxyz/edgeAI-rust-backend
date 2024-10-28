@@ -4,7 +4,6 @@ use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
 use rand::Rng;
 use rusqlite::params;
-use bytemuck::cast_slice;
 use std::error::Error;
 use log::info;
 impl DBConfig{
@@ -197,70 +196,70 @@ impl DBConfig{
         context_files
     }
 
-    pub fn query_session_context(
-        &self,
-        query_embeddings: Vec<f32>,
-        limit: usize,
-    ) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
-        // Lock the database connection safely
-        let connection = self.connection.lock().map_err(|e| {
-            format!("Failed to acquire lock: {}", e)
-        })?;
+    // pub fn query_session_context(
+    //     &self,
+    //     query_embeddings: Vec<f32>,
+    //     limit: usize,
+    // ) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
+    //     // Lock the database connection safely
+    //     let connection = self.connection.lock().map_err(|e| {
+    //         format!("Failed to acquire lock: {}", e)
+    //     })?;
     
-        // Convert the embeddings vector to a byte slice
-        let query_embedding_bytes = cast_slice(&query_embeddings);
+    //     // Convert the embeddings vector to a byte slice
+    //     let query_embedding_bytes = cast_slice(&query_embeddings);
     
-        // Prepare the SQL statement to find the nearest embeddings
-        let mut stmt = connection.prepare(
-            r#"
-            SELECT
-                rowid
-            FROM context_embeddings
-            WHERE embeddings MATCH ?
-            ORDER BY distance
-            LIMIT ?
-            "#,
-        )?;
+    //     // Prepare the SQL statement to find the nearest embeddings
+    //     let mut stmt = connection.prepare(
+    //         r#"
+    //         SELECT
+    //             rowid
+    //         FROM context_embeddings
+    //         WHERE embeddings MATCH ?
+    //         ORDER BY distance
+    //         LIMIT ?
+    //         "#,
+    //     )?;
     
-        // Execute the query and collect the nearest embeddings
-        let nearest_embeddings: Vec<i64> = stmt
-            .query_map(params![query_embedding_bytes, limit as i64], |row| {
-                row.get(0)
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+    //     // Execute the query and collect the nearest embeddings
+    //     let nearest_embeddings: Vec<i64> = stmt
+    //         .query_map(params![query_embedding_bytes, limit as i64], |row| {
+    //             row.get(0)
+    //         })?
+    //         .collect::<Result<Vec<_>, _>>()?;
     
-        // Collect context data for each nearest embedding
-        let mut context_files: Vec<(String, String, String, String)> = Vec::new();
+    //     // Collect context data for each nearest embedding
+    //     let mut context_files: Vec<(String, String, String, String)> = Vec::new();
     
-        for rowid in nearest_embeddings {
-            let mut stmt = connection.prepare(
-                r#"
-                SELECT
-                    file_path,
-                    chunk_type,
-                    content,
-                    session_id
-                FROM context_children
-                WHERE vec_row_id = ?
-                "#,
-            )?;
+    //     for rowid in nearest_embeddings {
+    //         let mut stmt = connection.prepare(
+    //             r#"
+    //             SELECT
+    //                 file_path,
+    //                 chunk_type,
+    //                 content,
+    //                 session_id
+    //             FROM context_children
+    //             WHERE vec_row_id = ?
+    //             "#,
+    //         )?;
     
-            let context_iter = stmt.query_map(params![rowid], |row| {
-                let file_path: String = row.get(0)?;
-                let chunk_type: String = row.get(1)?;
-                let content: String = row.get(2)?;
-                let session_id: String = row.get(3)?;
+    //         let context_iter = stmt.query_map(params![rowid], |row| {
+    //             let file_path: String = row.get(0)?;
+    //             let chunk_type: String = row.get(1)?;
+    //             let content: String = row.get(2)?;
+    //             let session_id: String = row.get(3)?;
 
-                Ok((file_path, chunk_type, content, session_id))
-            })?;
+    //             Ok((file_path, chunk_type, content, session_id))
+    //         })?;
     
-            for context in context_iter {
-                context_files.push(context?);
-            }
-        }
+    //         for context in context_iter {
+    //             context_files.push(context?);
+    //         }
+    //     }
     
-        Ok(context_files)
-    }
+    //     Ok(context_files)
+    // }
 
 
     pub fn get_row_ids(&self, row_ids: Vec<u64>) ->  Result<Vec<(String, String, String, String)>, Box<dyn Error>> {

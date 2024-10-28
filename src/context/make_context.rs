@@ -8,6 +8,7 @@ use crate::embeddings::text_embeddings::generate_text_embedding;
 use log::{error, info};
 use crate::rerank::rerank::rerank_documents;
 use std::collections::HashSet;
+use crate::similarity_index::index::search_index;
 
 
 /// Retrieves the last `n` chats for a given session.
@@ -93,7 +94,7 @@ async fn query_nearest_chat_embeddings(embeddings: Vec<f32>, limit: usize) -> Re
 ///
 /// # Returns
 /// A vector of tuples (file_path, chunk_type, content), or an error.
-async fn query_session_context(embeddings: Vec<f32>, limit: usize) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
+async fn query_session_context(session_id: &str, embeddings: Vec<f32>, limit: usize) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
     // match DB_INSTANCE.query_session_context(embeddings, limit) {
     //     Ok(context) => {
     //         info!("Nearest embeddings from the database {:?}", context);
@@ -104,20 +105,27 @@ async fn query_session_context(embeddings: Vec<f32>, limit: usize) -> Result<Vec
     //     }
     // }
 
-    let (chats, duration) = measure_time_async(|| async {
-        DB_INSTANCE.query_session_context(embeddings, limit)
-    }).await;
+    // let (chats, duration) = measure_time_async(|| async {
+    //     DB_INSTANCE.query_session_context(embeddings, limit)
+    // }).await;
 
-    match chats {
-        Ok(chats) => {
-            info!("Time elapsed in getting last {} nearest rag embeddings to query: {:?} and got {} nearest rag embeddings", limit, duration, chats.len());
-            Ok(chats)
-        }
-        Err(e) => {
-            error!("Failed to generate embeddings: {}", e);
-            Err(e)
-        }
-    }
+    // match chats {
+    //     Ok(chats) => {
+    //         info!("Time elapsed in getting last {} nearest rag embeddings to query: {:?} and got {} nearest rag embeddings", limit, duration, chats.len());
+    //         Ok(chats)
+    //     }
+    //     Err(e) => {
+    //         error!("Failed to generate embeddings: {}", e);
+    //         Err(e)
+    //     }
+    // }
+
+    let chunk_ids = search_index(session_id, embeddings, limit);
+
+    let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
+    Ok(entries)
+
+
 }
 
 /// Combines and formats the context (last chats, formatted session context, and nearest queries).
@@ -215,10 +223,8 @@ pub async fn make_context(session_id: &str, prompt: &str, top_n: usize) -> Resul
                                                             .into_iter()
                                                             .filter(|(_, _, _, _, sid)| sid == session_id)
                                                             .collect::<Vec<_>>();
-    let rag_context = query_session_context(embeddings, 100).await?
-                                                        .into_iter()
-                                                        .filter(|(_, _, _, sid)| sid == session_id)
-                                                        .collect::<Vec<_>>();
+    let rag_context = query_session_context(session_id, embeddings, 10).await?;
+                                                        
     let all_context_set = combine_contexts(last_chats.clone(), rag_context, query_context);
     let all_context: Vec<String> = all_context_set.into_iter().collect();
 
