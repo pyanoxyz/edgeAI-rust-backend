@@ -12,8 +12,8 @@ pub struct ParseCode{
     parse_loader: ParserLoader
 }
 
-// Define a struct for the code chunks
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize, Clone, Hash)]
 pub struct Chunk {
     pub chunk_type: String,
     pub content: String,
@@ -21,6 +21,23 @@ pub struct Chunk {
     pub end_line: usize,
     pub file_path: String,
 }
+
+impl Eq for Chunk {}
+
+impl PartialEq for Chunk {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChunkWithCompressedData {
+    pub chunk: Chunk,
+    pub compressed_content: String,
+    pub embeddings: Vec<f32>,
+    pub chunk_id: u64
+}
+
 
 
 impl ParseCode {

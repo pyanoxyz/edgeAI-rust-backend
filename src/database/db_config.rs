@@ -70,10 +70,60 @@ impl DBConfig {
 
     pub fn run_migrations(&self) -> Result<(), rusqlite_migration::Error> {
         let mut connection = self.connection.lock().unwrap();
-        info!("Migration for connection");
         match MIGRATIONS.to_latest(&mut connection) {
             Ok(_) => {
-                // info!("Migrations completed successfully");
+
+                // Begin transaction for safety
+                connection.execute("BEGIN TRANSACTION;", []).unwrap();
+            
+                // Step 1: Create a new table with the correct schema
+                connection
+                    .execute(
+                        "
+                        CREATE TABLE IF NOT EXISTS context_children_new (
+                            id TEXT PRIMARY KEY,
+                            user_id TEXT NOT NULL,
+                            session_id TEXT NOT NULL,
+                            parent_path TEXT,
+                            chunk_type TEXT,
+                            content TEXT,
+                            compressed_content TEXT,
+                            end_line INTEGER,
+                            file_path TEXT,
+                            start_line INTEGER,
+                            vec_row_id INTEGER NOT NULL,  -- INTEGER type for row ID reference
+                            timestamp TEXT
+                        );
+                        ",
+                        [],
+                    )
+                    .unwrap();
+            
+                // Step 2: Copy data from old table to new table, casting `vec_row_id` to INTEGER
+                connection
+                    .execute(
+                        "
+                        INSERT INTO context_children_new (id, user_id, session_id, parent_path, chunk_type,
+                                                          content, compressed_content, end_line, file_path,
+                                                          start_line, vec_row_id, timestamp)
+                        SELECT id, user_id, session_id, parent_path, chunk_type, content, compressed_content,
+                               end_line, file_path, start_line, CAST(vec_row_id AS INTEGER), timestamp
+                        FROM context_children;
+                        ",
+                        [],
+                    )
+                    .unwrap();
+            
+                // Step 3: Drop the old table
+                connection.execute("DROP TABLE context_children;", []).unwrap();
+            
+                // Step 4: Rename the new table to the original name
+                connection
+                    .execute("ALTER TABLE context_children_new RENAME TO context_children;", [])
+                    .unwrap();
+            
+                // Commit transaction
+                connection.execute("COMMIT;", []).unwrap();
                 Ok(())
             }
             Err(e) => {

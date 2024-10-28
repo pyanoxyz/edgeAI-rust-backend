@@ -1,13 +1,14 @@
 use actix_web::{ post, get, web, delete, HttpRequest, HttpResponse, Error };
 use serde::{ Deserialize, Serialize };
 use crate::authentication::authorization::is_request_allowed;
-use log::{ info, error };
+use log::{ info, warn };
 use crate::session_manager::check_session;
 use serde_json::json;
 use crate::rag::code_rag::index_code;
 use crate::parser::parse_code::Chunk;
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
+use crate::similarity_index::index::{search_index, remove_from_index};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RagRequest {
@@ -52,36 +53,35 @@ pub async fn rag_request(
         }
     };
 
-    let user_id: &str;
-    let user_id_cloned;
-
-    match is_request_allowed(req.clone()).await {
-        Ok(Some(user)) => {
-            // Handle case when request is allowed and user is present
-            user_id_cloned = user.user_id.clone();
-            user_id = &user_id_cloned;
-        }
-        Ok(None) => {
-            // Handle case when request is allowed but user is not found
-            user_id = "user_id"; // Default user_id
-        }
-        Err(error_response) => {
+    let user_id: String = match is_request_allowed(req.clone()).await {
+        Ok(Some(user)) => user.user_id.clone(),
+        Ok(None) => data.user_id.clone().unwrap_or_else(|| "user_id".to_string()), // Set default user_id if not present
+        Err(_) => {
             // Handle the error case by propagating the HttpResponse error
-            error!("Error in rag_request {:?}", error_response);
             return Err(
                 actix_web::error::ErrorInternalServerError(
-                    json!({
-                "error": "An error occurred during request validation"
-            })
+                    json!({ "error": "An error occurred during request validation" })
                 )
             );
         }
-    }
+    };
+
+    let entries: Vec<serde_json::Value> = DB_INSTANCE.fetch_session_context_files(&user_id, &session_id);
+    let indexed_paths: Vec<String> = entries
+        .iter()
+        .filter_map(|entry| entry.get("path").and_then(|p| p.as_str().map(String::from)))
+        .collect();
+
 
     let mut all_indexed_chunks: Vec<Chunk> = Vec::new();
     // Iterate over the files and call `index_code` for each
     for file_path in &data.files {
-        match index_code(user_id, &session_id, file_path).await {
+        if indexed_paths.contains(file_path) {
+            warn!("Skipping already indexed file: {:?}", file_path);
+            continue;
+        }
+
+        match index_code(&user_id, &session_id, file_path).await {
             Ok(chunks) => {
                 all_indexed_chunks.extend(chunks);
             }
@@ -176,16 +176,19 @@ pub async fn delete_rag_context(
             }
         }
 
-        match DB_INSTANCE.delete_children_context_by_parent_path(&user_id, &session_id, file_path) {
-            Ok(_) => {
+        let vec_row_ids = match DB_INSTANCE.delete_children_context_by_parent_path(&user_id, &session_id, file_path) {
+            Ok(ids) => {
                 info!("Successfully deleted chunks for file: {}", file_path);
+                ids
             }
             Err(e) => {
                 return Err(
                     actix_web::error::ErrorInternalServerError(json!({ "error": e.to_string() }))
                 );
             }
-        }
+        };
+        info!("vec_row_ids that awere deleted from sqlite {:?}", vec_row_ids);
+        remove_from_index(&session_id, vec_row_ids);
     }
 
     Ok(
@@ -272,8 +275,10 @@ async fn fetch_similar_entries(
             );
         }
     };
+    let chunk_ids = search_index(&data.session_id, query_embeddings.clone());
 
-    let entries = DB_INSTANCE.query_session_context(query_embeddings, 10).unwrap();
+    let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
+    info!("All the matching entries {:?}", entries);
     Ok(
         HttpResponse::Ok()
             .insert_header(("X-Session-Id", data.session_id.clone())) // Add session_id in custom header
