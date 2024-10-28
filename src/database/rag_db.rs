@@ -275,7 +275,7 @@ impl DBConfig{
                 SELECT
                     file_path,
                     chunk_type,
-                    compressed_content,
+                    content,
                     session_id
                 FROM context_children
                 WHERE vec_row_id = ?
