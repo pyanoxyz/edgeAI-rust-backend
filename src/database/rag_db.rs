@@ -1,13 +1,11 @@
 use crate::database::db_config::DBConfig;
 use uuid::Uuid;
-use zerocopy::AsBytes;
 use chrono::Utc; // For getting the current UTC timestamp
 use serde_json::{json, Value};
 use rand::Rng;
 use rusqlite::params;
-use bytemuck::cast_slice;
 use std::error::Error;
-
+use log::info;
 impl DBConfig{
 
     pub fn generate_rowid() -> u64 {
@@ -64,19 +62,19 @@ impl DBConfig{
         end_line: usize, 
         start_line: usize, 
         file_path: &str,
-        embeddings: &[f32],
+        vec_row_id: u64
     ) {
         // Lock the mutex to access the connection
         let connection = self.connection.lock().unwrap();
         
         // Generate UUIDs for the child and the vector embedding
         let uuid = Uuid::new_v4().to_string();
-        let vec_row_id: u64 = Self::generate_rowid();
     
         // Get the current UTC timestamp
         let timestamp = Utc::now().to_rfc3339();
     
         // Insert into context_children
+        info!("Storing {} in the context_children with user_id {} parent_path {}", vec_row_id, user_id, parent_path);
         connection.execute(
             "INSERT INTO context_children (
                 id, user_id, session_id, parent_path, chunk_type, content, compressed_content,
@@ -98,14 +96,14 @@ impl DBConfig{
             ],
         ).unwrap();
     
-        // Insert into context_embeddings
-        connection.execute(
-            "INSERT INTO context_embeddings (rowid, embeddings) VALUES (?, ?)",
-            params![
-                vec_row_id,
-                embeddings.as_bytes(),  // You can pass the float array directly in rusqlite
-            ],
-        ).unwrap();
+        // // Insert into context_embeddings
+        // connection.execute(
+        //     "INSERT INTO context_embeddings (rowid, embeddings) VALUES (?, ?)",
+        //     params![
+        //         vec_row_id,
+        //         embeddings.as_bytes(),  // You can pass the float array directly in rusqlite
+        //     ],
+        // ).unwrap();
     }
 
 
@@ -114,12 +112,13 @@ impl DBConfig{
         user_id: &str,
         session_id: &str,
         parent_path: &str,
-    ) -> Result<(), rusqlite::Error> {
+    ) -> Result<Vec<u64>, rusqlite::Error> {
         // Lock the mutex to access the connection
         let mut connection = self.connection.lock().unwrap();
     
         // Begin a transaction to ensure both deletions are atomic
-        let tx = connection.transaction()?;    
+        let tx = connection.transaction()?;
+
         // Collect `vec_row_id` within its own scope to avoid borrowing `tx` for too long
         let vec_row_ids: Vec<u64> = {
             let mut stmt = tx.prepare(
@@ -136,24 +135,25 @@ impl DBConfig{
             ids
         };
         // Delete from `context_children` table where parent_path matches
+        info!("vec_row_ids to be deleted are {:?}", vec_row_ids.len());
         tx.execute(
             "DELETE FROM context_children 
              WHERE user_id = ? AND session_id = ? AND parent_path = ?",
             params![user_id, session_id, parent_path],
         )?;
     
-        // Delete from `context_embeddings` for the corresponding vec_row_ids
-        for row_id in vec_row_ids {
-            tx.execute(
-                "DELETE FROM context_embeddings WHERE rowid = ?",
-                params![row_id],
-            )?;
-        }
+        // // Delete from `context_embeddings` for the corresponding vec_row_ids
+        // for row_id in &vec_row_ids {
+        //     tx.execute(
+        //         "DELETE FROM context_embeddings WHERE vec_row_id = ?",
+        //         params![row_id],
+        //     )?;
+        // }
     
         // Commit the transaction to apply the changes
         tx.commit()?;
     
-        Ok(())
+        Ok(vec_row_ids)
     }
     
 
@@ -196,42 +196,79 @@ impl DBConfig{
         context_files
     }
 
-    pub fn query_session_context(
-        &self,
-        query_embeddings: Vec<f32>,
-        limit: usize,
-    ) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
-        // Lock the database connection safely
+    // pub fn query_session_context(
+    //     &self,
+    //     query_embeddings: Vec<f32>,
+    //     limit: usize,
+    // ) -> Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
+    //     // Lock the database connection safely
+    //     let connection = self.connection.lock().map_err(|e| {
+    //         format!("Failed to acquire lock: {}", e)
+    //     })?;
+    
+    //     // Convert the embeddings vector to a byte slice
+    //     let query_embedding_bytes = cast_slice(&query_embeddings);
+    
+    //     // Prepare the SQL statement to find the nearest embeddings
+    //     let mut stmt = connection.prepare(
+    //         r#"
+    //         SELECT
+    //             rowid
+    //         FROM context_embeddings
+    //         WHERE embeddings MATCH ?
+    //         ORDER BY distance
+    //         LIMIT ?
+    //         "#,
+    //     )?;
+    
+    //     // Execute the query and collect the nearest embeddings
+    //     let nearest_embeddings: Vec<i64> = stmt
+    //         .query_map(params![query_embedding_bytes, limit as i64], |row| {
+    //             row.get(0)
+    //         })?
+    //         .collect::<Result<Vec<_>, _>>()?;
+    
+    //     // Collect context data for each nearest embedding
+    //     let mut context_files: Vec<(String, String, String, String)> = Vec::new();
+    
+    //     for rowid in nearest_embeddings {
+    //         let mut stmt = connection.prepare(
+    //             r#"
+    //             SELECT
+    //                 file_path,
+    //                 chunk_type,
+    //                 content,
+    //                 session_id
+    //             FROM context_children
+    //             WHERE vec_row_id = ?
+    //             "#,
+    //         )?;
+    
+    //         let context_iter = stmt.query_map(params![rowid], |row| {
+    //             let file_path: String = row.get(0)?;
+    //             let chunk_type: String = row.get(1)?;
+    //             let content: String = row.get(2)?;
+    //             let session_id: String = row.get(3)?;
+
+    //             Ok((file_path, chunk_type, content, session_id))
+    //         })?;
+    
+    //         for context in context_iter {
+    //             context_files.push(context?);
+    //         }
+    //     }
+    
+    //     Ok(context_files)
+    // }
+
+
+    pub fn get_row_ids(&self, row_ids: Vec<u64>) ->  Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
+        // Collect context data for each nearest embedding
+        let mut chunks: Vec<(String, String, String, String)> = Vec::new();
         let connection = self.connection.lock().map_err(|e| {
             format!("Failed to acquire lock: {}", e)
         })?;
-    
-        // Convert the embeddings vector to a byte slice
-        let query_embedding_bytes = cast_slice(&query_embeddings);
-    
-        // Prepare the SQL statement to find the nearest embeddings
-        let mut stmt = connection.prepare(
-            r#"
-            SELECT
-                rowid
-            FROM context_embeddings
-            WHERE embeddings MATCH ?
-            ORDER BY distance
-            LIMIT ?
-            "#,
-        )?;
-    
-        // Execute the query and collect the nearest embeddings
-        let nearest_embeddings: Vec<i64> = stmt
-            .query_map(params![query_embedding_bytes, limit as i64], |row| {
-                row.get(0)
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-    
-        // Collect context data for each nearest embedding
-        let mut context_files: Vec<(String, String, String, String)> = Vec::new();
-    
-        for rowid in nearest_embeddings {
+        for rowid in row_ids {
             let mut stmt = connection.prepare(
                 r#"
                 SELECT
@@ -243,7 +280,7 @@ impl DBConfig{
                 WHERE vec_row_id = ?
                 "#,
             )?;
-    
+
             let context_iter = stmt.query_map(params![rowid], |row| {
                 let file_path: String = row.get(0)?;
                 let chunk_type: String = row.get(1)?;
@@ -252,13 +289,13 @@ impl DBConfig{
 
                 Ok((file_path, chunk_type, content, session_id))
             })?;
-    
+
             for context in context_iter {
-                context_files.push(context?);
+                chunks.push(context?);
             }
         }
-    
-        Ok(context_files)
+
+        Ok(chunks)
     }
 
 

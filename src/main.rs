@@ -25,6 +25,7 @@ mod model_state;
 mod llm_stream;
 mod context;
 mod infill;
+mod similarity_index;
 use crate::model_state::state::ModelState;
 use crate::infill::state::InfillModelState ;
 

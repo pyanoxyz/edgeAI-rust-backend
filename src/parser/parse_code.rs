@@ -12,8 +12,8 @@ pub struct ParseCode{
     parse_loader: ParserLoader
 }
 
-// Define a struct for the code chunks
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize, Clone, Hash)]
 pub struct Chunk {
     pub chunk_type: String,
     pub content: String,
@@ -21,6 +21,23 @@ pub struct Chunk {
     pub end_line: usize,
     pub file_path: String,
 }
+
+impl Eq for Chunk {}
+
+impl PartialEq for Chunk {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChunkWithCompressedData {
+    pub chunk: Chunk,
+    pub compressed_content: String,
+    pub embeddings: Vec<f32>,
+    pub chunk_id: u64
+}
+
 
 
 impl ParseCode {
@@ -271,15 +288,15 @@ impl ParseCode {
             ],
             "solidity" => vec![
                 "function_definition", "contract_declaration", "struct_declaration", 
-                "enum_declaration", "source_file"
+                "enum_declaration"
             ],
             "rust" => vec![
                 "function_item", "struct_item", "enum_item", 
-                "impl_item", "source_file"
+                "impl_item"
             ],
             "go" => vec![
                 "function_declaration", "method_declaration", "struct_type", 
-                "interface_type", "source_file"
+                "interface_type"
             ],
             "java" => vec![
                 "method_declaration", "class_declaration", "interface_declaration", 
@@ -310,11 +327,11 @@ impl ParseCode {
             ],
             "swift" => vec![
                 "function_declaration", "class_declaration", "struct_declaration", 
-                "enum_declaration", "protocol_declaration", "source_file"
+                "enum_declaration", "protocol_declaration"
             ],
             "kotlin" => vec![
                 "function_declaration", "class_declaration", "object_declaration", 
-                "interface_declaration", "source_file"
+                "interface_declaration"
             ],
             "bash" => vec![
                 "function_definition", "command", "if_statement", "for_statement", 
@@ -344,7 +361,7 @@ impl ParseCode {
                 "user_instruction", "workdir_instruction"
             ],
             "elixir" => vec![
-                "function_definition", "module_definition", "source_file"
+                "function_definition", "module_definition"
             ],
             "elm" => vec![
                 "function_declaration", "type_declaration", "module_declaration", 
@@ -355,8 +372,7 @@ impl ParseCode {
                 "class_declaration", "instance_declaration", "module"
             ],
             "julia" => vec![
-                "function_definition", "struct_definition", "module_definition", 
-                "source_file"
+                "function_definition", "struct_definition", "module_definition"
             ],
             "lua" => vec![
                 "function_definition", "local_function", "table_constructor", 

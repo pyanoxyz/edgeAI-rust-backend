@@ -1,6 +1,6 @@
 [package]
 name = "pyano_server"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2021"
 build = "build.rs"  # Ensure build.rs is called during build
 
@@ -51,6 +51,7 @@ async-stream = "0.3.5"
 dirs = "5.0.1"
 bytemuck = "1.18.0"
 rusqlite_migration = "1.3.1"
+usearch = "2.15.3"
 
 [dev-dependencies]
 actix-web = "4"

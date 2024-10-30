@@ -7,11 +7,14 @@ use reqwest::Client;
 use std::io::{self};
 use std::path::Path;
 use git2::Repository;
-use log::info;
-use crate::parser::parse_code::{ParseCode, Chunk};
+use log::{info, error};
+use crate::parser::parse_code::{ParseCode, Chunk, ChunkWithCompressedData};
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
+use crate::similarity_index::index::add_to_index;
+use rand::Rng;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 struct InvalidGitURLError(String);
@@ -155,6 +158,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     let mut file_paths = Vec::new();
     let parse_code = ParseCode::new();
     let mut all_chunks: Vec<Chunk> = Vec::new();
+    let mut chunks_with_compressed_data: Vec<ChunkWithCompressedData> = Vec::new();
 
     //Storing parent files in the database, before storing individual chunks for parent in 
     //another table
@@ -217,6 +221,14 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     else {
         info!("The path is neither a local directory, file, remote repository, nor a remote file.");
     }
+
+
+    // Create a `HashSet` to track unique content
+    let mut unique_chunks = HashSet::new();
+    
+    // Filter out duplicate chunks based on `content`, keeping the original `Chunk`
+    all_chunks.retain(|chunk| unique_chunks.insert(chunk.content.clone()));
+    
     DB_INSTANCE.store_parent_context(user_id, session_id, path, filetype, category);
 
     for chunk in &all_chunks {
@@ -225,10 +237,27 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         let unwrapped_token = tokens.unwrap();
         let compressed_content = unwrapped_token.join(" ");        
         info!("content_tokens = {}, compressed_content_tokens={}", &chunk.content.len(), compressed_content.len());
-        let embeddings: Option<Vec<f32>> = compressed_content_embeddings(&compressed_content).await;
+        // Unwrap the embeddings safely
+        let chunk_id = generate_rowid();
+
+
+        // Try to get the embeddings and update embeddings_vec
+        if let Some(embeddings) = compressed_content_embeddings(&compressed_content).await {
+
+            let chunk_with_data = ChunkWithCompressedData {
+                chunk: chunk.clone(), // Assuming Chunk implements Clone
+                compressed_content: compressed_content.clone(),
+                embeddings: embeddings.clone(),
+                chunk_id,
+            };
+
+            chunks_with_compressed_data.push(chunk_with_data);
+        } else {
+            error!("Failed to get embeddings for chunk: {:?}", chunk);
+        }
 
         DB_INSTANCE.store_children_context(user_id, 
-                        session_id, 
+                        session_id,
                         path, 
                         &chunk.chunk_type, 
                         &chunk.content, 
@@ -236,11 +265,17 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
                         chunk.start_line, 
                         chunk.end_line, 
                         &chunk.file_path, 
-                        &embeddings.unwrap() )
+                        chunk_id
+                    )
     }
 
-
+    add_to_index(session_id, chunks_with_compressed_data);
     Ok(all_chunks)
+}
+
+pub fn generate_rowid() -> u64 {
+    let mut rng = rand::thread_rng();
+    rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
 }
 
 async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
