@@ -19,6 +19,7 @@ use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_pro
 use futures::StreamExt; // Ensure StreamExt is imported
 use crate::session_manager::check_session;
 use reqwest::Client;
+use super::types::StepData;
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -100,13 +101,14 @@ pub async fn pair_programmer_generate_steps(
             "detail": "Task is required"
         })));
     }
-    
+    let pair_programmer_id = Uuid::new_v4().to_string();
+
     
     if let Some(files) = &data.files {
         for file_path in files {
 
-            match index_code(&user_id, &session_id, file_path).await {
-                Ok(chunks) => {
+            match index_code(&user_id, &pair_programmer_id, file_path).await {
+                Ok(_) => {
                 }
                 Err(e) => {
                     return Err(
@@ -133,20 +135,30 @@ pub async fn pair_programmer_generate_steps(
         }
     };
 
-    let chunk_ids = search_index(&session_id, query_embeddings.clone(), 10);
+    let chunk_ids = search_index(&pair_programmer_id, query_embeddings.clone(), 20);
 
+    //  let file_path, chunk_type, content, pair_programmer_id;
     let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
     info!("All the matching entries {:?}", entries);
+    let formatted_entries: String = entries
+    .iter()
+    .map(|(file_path, _, content, _)| format!("{}\n{}", file_path, content))
+    .collect::<Vec<String>>()
+    .join("\n\n");
 
-
+    info!("Formatted entries:\n{}", formatted_entries);
+    let user_prompt_with_context = format!(
+        "{}\nCONTEXT_CODE\n{}",
+        data.task.clone(),
+        formatted_entries
+    );
 
 
     // This variable will accumulate the entire content of the stream
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
-    let pair_programmer_id = Uuid::new_v4().to_string();
-    let agent = AgentEnum::new("planner", data.task.clone(), data.task.clone())?;
+    let agent = AgentEnum::new("planner", user_prompt_with_context)?;
 
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
@@ -219,18 +231,49 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
-    let(step_number, 
-        task_heading, 
-        function_call, 
-        _, 
-        all_steps, 
-        steps_executed_so_far, 
-        _) = data_validation(&pair_programmer_id, step_number).unwrap();
+    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
 
 
-    let task_with_context=   prompt_with_context(&all_steps, &steps_executed_so_far, &task_heading, "", "");
+    let embeddings_result = generate_text_embedding(&step_data.task_heading).await;
+    let query_embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => {
+            return Ok(
+                HttpResponse::BadRequest().json(
+                    serde_json::json!({
+            "message": "No Matching result found", 
+            "result": []
+        })
+                )
+            );
+        }
+    };
+
+    let chunk_ids = search_index(&pair_programmer_id, query_embeddings.clone(), 20);
+
+    //  let file_path, chunk_type, content, session_id;
+    let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
+    info!("All the matching entries {:?}", entries);
+    let formatted_entries: String = entries
+        .iter()
+        .map(|(file_path, _, content, _)| format!("{}\n{}", file_path, content))
+        .collect::<Vec<String>>()
+        .join("\n\n");
+
+    info!("Formatted entries:\n{}", formatted_entries);
+    let step_context = format!(
+        "{}\nCONTEXT_CODE\n{}",
+        step_data.task_heading.clone(),
+        formatted_entries
+    );
+
+    
+    let task_with_context = prompt_with_context(&step_data.all_steps, 
+                                                    &step_data.steps_executed_so_far, 
+                                                    &step_data.task_heading, 
+                                                    &step_context, "");
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new(&function_call, task_heading.to_string(), task_with_context)?;
+    let agent = AgentEnum::new("llm", task_with_context)?;
 
     // This variable will accumulate the entire content of the stream
     let accumulated_content = Arc::new(Mutex::new(String::new()));
@@ -248,7 +291,7 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_number).await;
+        handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_data.step_number).await;
     });
 
     Ok(response)
@@ -352,17 +395,16 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
     let step_number = &valid_data.step_number;
     let prompt = valid_data.prompt.clone();
 
-    let(step_number, 
-        task_heading, 
-        _, 
-        _, 
-        all_steps, 
-        steps_executed_so_far, 
-        _) = data_validation(&pair_programmer_id, step_number).unwrap();
+    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
+
     
-    let task_with_context=   prompt_with_context_for_chat(&all_steps, &steps_executed_so_far, &task_heading, &prompt, "");
+    let task_with_context=   prompt_with_context_for_chat(
+                    &step_data.all_steps, 
+                    &step_data.steps_executed_so_far, 
+                    &step_data.task_heading, 
+                    &prompt, "");
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new("chat", task_heading.to_string(), task_with_context)?;
+    let agent = AgentEnum::new("chat", task_with_context)?;
 
     // This variable will accumulate the entire content of the stream
 
@@ -381,7 +423,7 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
 
     // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        handle_stream_completion_chat(rx, accumulated_content, pair_programmer_id, &prompt, step_number).await;
+        handle_stream_completion_chat(rx, accumulated_content, pair_programmer_id, &prompt, step_data.step_number).await;
     });
 
     Ok(response)
@@ -417,18 +459,17 @@ pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req:
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
 
-    let(step_number, 
-        task_heading, 
-        _, 
-        step_chat, 
-        all_steps, 
-        steps_executed_so_far, 
-        _) = data_validation(&pair_programmer_id, step_number).unwrap();
+    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
+
     
 
-    let task_with_context=   rethink_prompt_with_context(&all_steps, &steps_executed_so_far, &task_heading, &step_chat);
+    let task_with_context=   rethink_prompt_with_context(
+                                &step_data.all_steps, 
+                                &step_data.steps_executed_so_far, 
+                                &step_data.task_heading, 
+                                &step_data.step_chat);
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new("rethinker", task_heading.to_string(), task_with_context)?;
+    let agent = AgentEnum::new("rethinker", task_with_context)?;
 
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
@@ -445,7 +486,7 @@ pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req:
 
     // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        handle_stream_completion_rethinker(rx, accumulated_content, pair_programmer_id, step_number).await;
+        handle_stream_completion_rethinker(rx, accumulated_content, pair_programmer_id, step_data.step_number).await;
     });
 
     Ok(response)
@@ -601,10 +642,24 @@ async fn handle_stream_completion_planner(
         .unwrap_or_else(|_| Mutex::new(String::new()))
         .into_inner()
         .unwrap();
-    let steps = parse_steps(&accumulated_content_final);
+
+    let json_data = accumulated_content_final
+        .replace("```json", "") // Remove the opening marker
+        .replace("```", ""); 
+    
+    info!("Json data {}", json_data);
+    // Attempt to parse and handle errors gracefully
+    let steps: Vec<crate::pair_programmer::types::Step> = match parse_steps(&json_data) {
+        Ok(parsed_steps) => parsed_steps,
+        Err(e) => {
+            eprintln!("Failed to parse JSON: {}", e);
+            return; // Exit early if parsing fails
+        }
+    };
+
 
     // Print the accumulated content after streaming is completed
-    println!("Final accumulated content: {}", accumulated_content_final);
+    println!("Steps = {:?}", steps);
 
     let db_response= DB_INSTANCE.store_new_pair_programming_session(user_id, session_id, &pair_programmer_id, task, &steps);
     match  db_response {

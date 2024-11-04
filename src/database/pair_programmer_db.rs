@@ -4,7 +4,7 @@ use chrono::Utc; // For getting the current UTC timestamp
 use rusqlite::params;
 use serde_json::{json, Value};
 use crate::database::db_config::DBConfig;
-use crate::pair_programmer::pair_programmer_types::{Step, StepChat};
+use crate::pair_programmer::types::{Step, StepChat};
 use log::info;
 use std::error::Error;
 
@@ -62,7 +62,7 @@ impl DBConfig{
                     user_id,
                     session_id,
                     step.heading,
-                    step.tool,
+                    step.action,
                     0,
                     "",
                     timestamp.as_str(),

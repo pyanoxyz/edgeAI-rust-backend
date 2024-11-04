@@ -1,114 +1,74 @@
 
 use regex::Regex;
 use serde_json::Value; // For handling JSON data
-use crate::pair_programmer::pair_programmer_types::Step;
 use std::cmp::max;
 use actix_web:: Error;
 use crate::database::db_config::DB_INSTANCE;
-/// Parses a string input and extracts steps with their associated metadata, including step number, heading, tool, and action.
-///
-/// This function uses regular expressions to parse each line of the input string, matching the following patterns:
-/// 1. **Step**: Captures the step number and heading in the format `Step N: Description`.
-/// 2. **Tool**: Captures the tool name, allowing for spaces and hyphens, in the format `Tool: tool-name`.
-/// 3. **Action**: Captures an action that contains a function and parameters in the format 
-///    `Action: <function=function_name>{{parameters}}`
-///
-/// Each step is represented by a `Step` struct that holds the following:
-/// - `step_number`: The step's number.
-/// - `heading`: A string representing the heading or description of the step.
-/// - `tool`: The tool name associated with the step, if provided.
-/// - `action`: The action to be executed, containing a function and its parameters, if provided.
-///
-/// # Arguments
-///
-/// * `input` - A string slice (`&str`) containing the step definitions. The steps should be formatted in a predefined structure with step number, tool, and action.
-///
-/// # Returns
-///
-/// * `Vec<Step>` - A vector of `Step` structs, each representing a parsed step with its metadata.
-///
-/// # Example
-///
-/// ```rust
-/// let input = r#"
-/// Step 1: Initialize the project
-/// Tool: build-tool
-/// Action: <function=initialize>{{"param": "value"}}
-///
-/// Step 2: Set up environment
-/// Tool: env-tool
-/// Action: <function=setup>{{"config": "env"}}
-/// "#;
-///
-/// let steps = parse_steps(input);
-/// for step in steps {
-///     println!("Step {}: {}", step.step_number, step.heading);
-///     println!("Tool: {}", step.tool);
-///     println!("Action: {}", step.action);
-/// }
-/// ```
-///
-/// This example demonstrates how the function processes the input and extracts the steps, tools, and actions. 
-/// The output will be a list of `Step` structs, with each step containing its parsed attributes.
-///
-/// # Note
-/// - If a step does not contain a tool or an action, the corresponding fields will remain empty.
-/// - The last step is automatically added when the end of the input is reached.
+use super::types::{StepData, Step, StepsWrapper};
 
-pub fn parse_steps(input: &str) -> Vec<Step> {
-    // Regex for matching the step number and description
-    let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap();
-    
-    // Regex for matching the tool, allowing spaces and tool names with hyphens
-    let re_tool = Regex::new(r"(?i)\s*Tool\s*:\s*([\w\-]+)").unwrap();
-    
-    // Regex for matching the action, including function name and parameters
-    let re_action = Regex::new(r#"(?i)\s*Action\s*:\s*<function=([^>]+)>\s*\{\{(.+?)\}\}\s*</function>"#).unwrap();
-    
-    let mut steps = Vec::new();
-    let mut current_step_number = 0;
-    let mut current_heading = String::new();
-    let mut current_tool = String::new();
-    let mut current_action = String::new();
 
-    for line in input.lines() {
-        let trimmed_line = line.trim();
+// pub fn parse_steps(input: &str) -> Vec<Step> {
+//     // Regex for matching the step number and description
+//     let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap();
+    
+//     // Regex for matching the tool, allowing spaces and tool names with hyphens
+//     let re_tool = Regex::new(r"(?i)\s*Tool\s*:\s*([\w\-]+)").unwrap();
+    
+//     // Regex for matching the action, including function name and parameters
+//     let re_action = Regex::new(r#"(?i)\s*Action\s*:\s*<function=([^>]+)>\s*\{\{(.+?)\}\}\s*</function>"#).unwrap();
+    
+//     let mut steps = Vec::new();
+//     let mut current_step_number = 0;
+//     let mut current_heading = String::new();
+//     let mut current_tool = String::new();
+//     let mut current_action = String::new();
+
+//     for line in input.lines() {
+//         let trimmed_line = line.trim();
         
-        if let Some(caps) = re_step.captures(trimmed_line) {
-            // Push the previous step if exists
-            if current_step_number > 0 {
-                steps.push(Step {
-                    step_number: current_step_number,
-                    heading: current_heading.clone(),
-                    tool: current_tool.clone(),
-                    action: current_action.clone(),
-                });
-            }
+//         if let Some(caps) = re_step.captures(trimmed_line) {
+//             // Push the previous step if exists
+//             if current_step_number > 0 {
+//                 steps.push(Step {
+//                     step_number: current_step_number,
+//                     heading: current_heading.clone(),
+//                     tool: current_tool.clone(),
+//                     action: current_action.clone(),
+//                 });
+//             }
 
-            // Start a new step
-            current_step_number = caps[1].parse().unwrap_or(0);
-            current_heading = caps[2].to_string();
-            current_tool.clear();
-            current_action.clear();
-        } else if let Some(caps) = re_tool.captures(trimmed_line) {
-            current_tool = caps[1].to_string();
-        } else if let Some(caps) = re_action.captures(trimmed_line) {
-            current_action = format!("<function={}>{{{{{}}}}}", &caps[1], &caps[2]);
-        }
-    }
+//             // Start a new step
+//             current_step_number = caps[1].parse().unwrap_or(0);
+//             current_heading = caps[2].to_string();
+//             current_tool.clear();
+//             current_action.clear();
+//         } else if let Some(caps) = re_tool.captures(trimmed_line) {
+//             current_tool = caps[1].to_string();
+//         } else if let Some(caps) = re_action.captures(trimmed_line) {
+//             current_action = format!("<function={}>{{{{{}}}}}", &caps[1], &caps[2]);
+//         }
+//     }
 
-    // Add the last step if it exists
-    if current_step_number > 0 {
-        steps.push(Step {
-            step_number: current_step_number,
-            heading: current_heading.clone(),
-            tool: current_tool.clone(),
-            action: current_action.clone(),
-        });
-    }
+//     // Add the last step if it exists
+//     if current_step_number > 0 {
+//         steps.push(Step {
+//             step_number: current_step_number,
+//             heading: current_heading.clone(),
+//             tool: current_tool.clone(),
+//             action: current_action.clone(),
+//         });
+//     }
 
-    steps
+//     steps
+// }
+
+
+pub fn parse_steps(json_data: &str) -> Result<Vec<Step>, Error> {
+    let parsed: StepsWrapper = serde_json::from_str(json_data)?; // Parse into StepsWrapper first
+    Ok(parsed.steps) // Extract the steps field and return
 }
+
+
 
 // Helper function to parse the step_number from a string to usize
 pub fn parse_step_number(step_number_str: &str) -> Result<usize, Error> {
@@ -364,16 +324,16 @@ pub fn rethink_prompt_with_context(
 }
 
 
-pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<(usize, String, String, String, String, String, String), actix_web::Error>{
+pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<StepData, Error> {
     let step_number = parse_step_number(step_number).map_err(|err| {
         actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
     })?;
-    let true_step_number = step_number -1;
+    let true_step_number = step_number - 1;
 
     let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
 
-     // Validate steps
-     validate_steps(step_number, &steps).map_err(|err| {
+    // Validate steps
+    validate_steps(step_number, &steps).map_err(|err| {
         actix_web::error::ErrorBadRequest(format!("Step validation failed: {}", err))
     })?;
 
@@ -382,25 +342,36 @@ pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<(u
         actix_web::error::ErrorBadRequest(format!("Step number out of range: {}", true_step_number))
     })?;
 
-    let step_chat = DB_INSTANCE.step_chat_string(pair_programmer_id, &step_number.to_string()).map_err(|err| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to retrieve chat: {:?}", err))
-    })?;
+    let step_chat = DB_INSTANCE
+        .step_chat_string(pair_programmer_id, &step_number.to_string())
+        .map_err(|err| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to retrieve chat: {:?}", err))
+        })?;
 
-      // Retrieve the task heading from the step
-    let task_heading = step.get("heading")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| {
-          actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string for step {}", true_step_number))
-      })?;
+    // Retrieve the task heading from the step
+    let task_heading = step
+        .get("heading")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            actix_web::error::ErrorBadRequest(format!(
+                "Invalid step: 'heading' field is missing or not a string for step {}",
+                true_step_number
+            ))
+        })?;
 
-    let function_call = step.get("tool")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| {
-          actix_web::error::ErrorBadRequest(format!("Invalid step: 'tool' field is missing or not a string {}", step_number))
-      })
-      .unwrap();
+    let function_call = "";
 
-    let (all_steps, steps_executed_so_far, steps_executed_response) = format_steps(&steps, step_number);
+    let (all_steps, steps_executed_so_far, steps_executed_response) =
+        format_steps(&steps, step_number);
 
-    Ok((step_number, task_heading.to_owned(), function_call.to_owned(), step_chat, all_steps, steps_executed_so_far, steps_executed_response))
+        Ok(StepData {
+            step_number,
+            task_heading: task_heading.to_owned(),
+            function_call: function_call.to_string(),
+            step_chat,
+            all_steps,
+            steps_executed_so_far,
+            steps_executed_response,
+        })
+        
 }
