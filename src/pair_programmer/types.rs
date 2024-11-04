@@ -8,11 +8,10 @@ pub struct StepData {
     pub function_call: String,
     pub step_chat: String,
     pub all_steps: String,
-    pub steps_executed_so_far: String,
     pub steps_executed_response: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
-struct StepDetails {
+pub struct StepDetails {
     filename: Option<String>,
     directory: Option<String>,
     command: Option<String>,

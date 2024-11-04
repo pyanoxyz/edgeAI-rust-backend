@@ -1,7 +1,5 @@
 
-use regex::Regex;
 use serde_json::Value; // For handling JSON data
-use std::cmp::max;
 use actix_web:: Error;
 use crate::database::db_config::DB_INSTANCE;
 use super::types::{StepData, Step, StepsWrapper};
@@ -157,67 +155,23 @@ pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Res
         }
 
         // Ensure that all previous steps are executed
-        if actual_index < step_number {
-            let previous_executed = step_data.get("executed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+        // if actual_index < step_number {
+        //     let previous_executed = step_data.get("executed")
+        //         .and_then(|v| v.as_bool())
+        //         .unwrap_or(false);
 
-            if !previous_executed {
-                return Err(actix_web::error::ErrorBadRequest(
-                    format!("Previous step {} has not been executed", actual_index),
-                ));
-            }
-        }
+        //     if !previous_executed {
+        //         return Err(actix_web::error::ErrorBadRequest(
+        //             format!("Previous step {} has not been executed", actual_index),
+        //         ));
+        //     }
+        // }
     }
     Ok(())
 }
 
-/// Formats the steps in a structured way, generating three different outputs:
-/// 1. A formatted list of all steps with their headings.
-/// 2. A formatted list of steps that have been executed so far.
-/// 3. A formatted list of the most recent executed steps (up to the last 3 before the current step),
-///    along with their associated responses.
-///
-/// # Arguments
-///
-/// * `steps` - A slice of `serde_json::Value` representing the steps. Each step is expected to contain:
-///   - `"heading"`: A string representing the heading of the step.
-///   - `"executed"`: A boolean indicating whether the step has been executed.
-///   - `"response"`: A string representing the response associated with the step, if available.
-/// * `step_number` - The current step number, used to filter and limit the steps executed with responses.
-///
-/// # Returns
-///
-/// A tuple containing three formatted strings:
-/// * `(String, String, String)`:
-///   - The first string contains all steps with their headings in the format `Step: N. Heading`.
-///   - The second string contains the steps that have been executed so far, filtered by the `"executed"` field.
-///   - The third string contains the last 3 executed steps (limited to steps before the current step number),
-///     including their responses, in the format:
-///     ```
-///     Step: Heading
-///     response: Response
-///     ```
-///
-/// # Example
-///
-/// ```rust
-/// let steps = vec![
-///     json!({"heading": "Initialize project", "executed": true, "response": "Success"}),
-///     json!({"heading": "Set up environment", "executed": false}),
-///     json!({"heading": "Run tests", "executed": true, "response": "All tests passed"}),
-/// ];
-///
-/// let (all_steps, steps_executed_so_far, steps_executed_with_response) = format_steps(&steps, 3);
-///
-/// println!("All Steps:\n{}", all_steps);
-/// println!("Executed Steps So Far:\n{}", steps_executed_so_far);
-/// println!("Executed Steps with Responses:\n{}", steps_executed_with_response);
-/// ```
-///
-/// This example shows how to use the function to get the formatted steps and how the output is structured.
 
-pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String, String) {
+pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String) {
     // Format all steps
     let all_steps = steps.iter()
         .enumerate()
@@ -228,22 +182,14 @@ pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String, Str
         .collect::<Vec<String>>()
         .join("\n");
 
-    // Format steps executed so far
-    let steps_executed_so_far = steps.iter()
-        .enumerate()
-        .filter(|(_, step)| step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false))
-        .map(|(index, step)| {
-            let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
-            format!("Step: {}. {}", index + 1, heading)
-        })
-        .collect::<Vec<String>>()
-        .join("\n");
 
-    // Format steps executed with response (limit to last 3 before current step_number)
+    // Format steps executed with response (output all steps before the current step_number)
     let steps_executed_with_response = steps.iter()
-        .skip(max(0, step_number.saturating_sub(3)))  // Start from max(0, step_number-3)
-        .take(step_number)  // Take up to current step_number
-        .filter(|step| step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false))
+        .take(step_number)  // Take all steps up to the current step_number
+        .filter(|step| {
+            step.get("tool").and_then(|v| v.as_str()) == Some("edit_file") &&
+            step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false)
+        })
         .map(|step| {
             let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
             let response = step.get("response").and_then(|v| v.as_str()).unwrap_or("No Response");
@@ -252,7 +198,8 @@ pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String, Str
         .collect::<Vec<String>>()
         .join("\n");
 
-    (all_steps, steps_executed_so_far, steps_executed_with_response)
+
+    (all_steps, steps_executed_with_response)
 }
 
 pub fn prompt_with_context(
@@ -337,10 +284,22 @@ pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<St
         actix_web::error::ErrorBadRequest(format!("Step validation failed: {}", err))
     })?;
 
+
+
     // Fetch the current step based on true_step_number
     let step = steps.get(true_step_number).ok_or_else(|| {
         actix_web::error::ErrorBadRequest(format!("Step number out of range: {}", true_step_number))
     })?;
+
+
+    let tool = step
+        .get("tool")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("Tool field is missing or not a string"))?;
+
+    if tool != "edit_file" {
+        return Err(actix_web::error::ErrorBadRequest("Tool must be 'edit_file'").into());
+    }
 
     let step_chat = DB_INSTANCE
         .step_chat_string(pair_programmer_id, &step_number.to_string())
@@ -361,7 +320,7 @@ pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<St
 
     let function_call = "";
 
-    let (all_steps, steps_executed_so_far, steps_executed_response) =
+    let (all_steps, steps_executed_response) =
         format_steps(&steps, step_number);
 
         Ok(StepData {
@@ -370,8 +329,7 @@ pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<St
             function_call: function_call.to_string(),
             step_chat,
             all_steps,
-            steps_executed_so_far,
-            steps_executed_response,
+            steps_executed_response
         })
         
 }

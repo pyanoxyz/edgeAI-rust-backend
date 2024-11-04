@@ -19,7 +19,6 @@ use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_pro
 use futures::StreamExt; // Ensure StreamExt is imported
 use crate::session_manager::check_session;
 use reqwest::Client;
-use super::types::StepData;
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -231,8 +230,16 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
-    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
-
+    let step_data = match data_validation(&pair_programmer_id, step_number) {
+        Ok(step_data) => step_data, // Proceed if validation succeeds
+        Err(err) => {
+            // Handle validation failure
+            let error_response = ErrorResponse {
+                error: format!("Data validation failed: {}", err),
+            };
+            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+        }
+    };
 
     let embeddings_result = generate_text_embedding(&step_data.task_heading).await;
     let query_embeddings = match embeddings_result {
@@ -269,11 +276,15 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     
     let task_with_context = prompt_with_context(&step_data.all_steps, 
-                                                    &step_data.steps_executed_so_far, 
+                                                    &step_data.steps_executed_response, 
                                                     &step_data.task_heading, 
                                                     &step_context, "");
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new("llm", task_with_context)?;
+
+    info!("Task With COntext:\n{}", task_with_context);
+
+
+    let agent = AgentEnum::new("generate-code", task_with_context)?;
 
     // This variable will accumulate the entire content of the stream
     let accumulated_content = Arc::new(Mutex::new(String::new()));
@@ -400,7 +411,7 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
     
     let task_with_context=   prompt_with_context_for_chat(
                     &step_data.all_steps, 
-                    &step_data.steps_executed_so_far, 
+                    &step_data.steps_executed_response, 
                     &step_data.task_heading, 
                     &prompt, "");
     // Match the function call and return the appropriate agent
@@ -465,7 +476,7 @@ pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req:
 
     let task_with_context=   rethink_prompt_with_context(
                                 &step_data.all_steps, 
-                                &step_data.steps_executed_so_far, 
+                                &step_data.steps_executed_response, 
                                 &step_data.task_heading, 
                                 &step_data.step_chat);
     // Match the function call and return the appropriate agent

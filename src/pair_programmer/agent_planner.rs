@@ -38,7 +38,7 @@ impl Agent for PlannerAgent {
         {
           "steps": [
             {
-              "step_number": "Step 1",
+              "step_number": "1",
               "heading": "[Description of task, referencing specific filenames and/or directory names if applicable]",
               "action": "[e.g., create_directory, open_file, run_command]",
               "details": {
