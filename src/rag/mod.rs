@@ -1,2 +1,2 @@
 pub mod code_rag_api;
-mod code_rag;
+pub mod code_rag;

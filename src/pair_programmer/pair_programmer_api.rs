@@ -6,6 +6,8 @@ use actix_web::FromRequest;
 use std::sync::{Arc, Mutex};
 use log::{info, debug, error};
 use serde::{Deserialize, Serialize};
+use crate::rag::code_rag::index_code;
+use crate::similarity_index::index::search_index;
 use crate::pair_programmer::agent::Agent;
 use crate::database::db_config::DB_INSTANCE;
 use crate::pair_programmer::agent_enum::AgentEnum;
@@ -29,6 +31,7 @@ pub struct GenerateStepsRequest {
     pub task: String,
     pub session_id: Option<String>,
     pub user_id: Option<String>,
+    pub files: Option<Vec<String>>,
 
 }
 
@@ -97,6 +100,46 @@ pub async fn pair_programmer_generate_steps(
             "detail": "Task is required"
         })));
     }
+    
+    
+    if let Some(files) = &data.files {
+        for file_path in files {
+
+            match index_code(&user_id, &session_id, file_path).await {
+                Ok(chunks) => {
+                }
+                Err(e) => {
+                    return Err(
+                        actix_web::error::ErrorInternalServerError(json!({ "error": e.to_string() }))
+                    );
+                }
+            }
+        }
+
+    }
+
+    let embeddings_result = generate_text_embedding(&data.task).await;
+    let query_embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => {
+            return Ok(
+                HttpResponse::BadRequest().json(
+                    serde_json::json!({
+            "message": "No Matching result found", 
+            "result": []
+        })
+                )
+            );
+        }
+    };
+
+    let chunk_ids = search_index(&session_id, query_embeddings.clone(), 10);
+
+    let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
+    info!("All the matching entries {:?}", entries);
+
+
+
 
     // This variable will accumulate the entire content of the stream
     let accumulated_content = Arc::new(Mutex::new(String::new()));
