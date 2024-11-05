@@ -75,7 +75,27 @@ impl DBConfig{
         
         Ok(())
     }
-    
+
+    pub fn fetch_task_from_pair_programmer(
+        &self, 
+        pair_programmer_id: &str
+    ) -> Result<String, Box<dyn Error>> {
+        
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock()
+            .map_err(|_| "Failed to acquire lock for connection")?;
+        
+        // Query to fetch only the task from pair_programmer table
+        let mut stmt = connection.prepare(
+            "SELECT task FROM pair_programmer WHERE id = ?"
+        )?;
+        
+        // Execute the query and fetch the result
+        let task: String = stmt.query_row([pair_programmer_id], |row| row.get(0))
+            .map_err(|e| format!("Failed to fetch task for session_id {}: {}", pair_programmer_id, e))?;
+        
+        Ok(task)
+    }
 
     pub fn fetch_steps(&self, pair_programmer_id: &str) -> Vec<Value> {
         // Lock the mutex to access the connection

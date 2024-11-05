@@ -203,16 +203,20 @@ pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String) {
 }
 
 pub fn prompt_with_context(
+    pair_programmer_id: &str,
     all_steps: &str, 
     steps_executed: &str, 
     current_step: &str, 
     additional_context_from_codebase: &str, 
     recent_discussion: &str
 ) -> String {
+
+    let original_task = DB_INSTANCE.fetch_task_from_pair_programmer(&pair_programmer_id).unwrap();
     format!(
         r#"
+        original_task: {original_task}
         all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
+        executed_steps: {steps_executed}
         current_step: {current_step}
         overall_context: {additional_context_from_codebase}
         recent_discussion: {recent_discussion}

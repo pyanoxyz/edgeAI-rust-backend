@@ -275,7 +275,8 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
     );
 
     
-    let task_with_context = prompt_with_context(&step_data.all_steps, 
+    let task_with_context = prompt_with_context(&pair_programmer_id,
+                                                    &step_data.all_steps, 
                                                     &step_data.steps_executed_response, 
                                                     &step_data.task_heading, 
                                                     &step_context, "");
