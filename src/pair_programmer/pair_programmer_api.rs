@@ -15,7 +15,7 @@ use crate::summarization::summarize::summarize_text;
 use crate::prompt_compression::compress::get_attention_scores;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
-use crate::pair_programmer::pair_programmer_utils::{data_validation, rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
+use crate::pair_programmer::pair_programmer_utils::{rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
 use futures::StreamExt; // Ensure StreamExt is imported
 use crate::session_manager::check_session;
 use reqwest::Client;
@@ -68,10 +68,87 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
     .service(get_steps)
     .service(execute_step)
     .service(chat_step)
-    .service(rethink_step);
+    .service(test_json_parsing);
 }
 
+#[get("/pair-programmer/test_json_parsing")]
+pub async fn test_json_parsing(
+    client: web::Data<Client>,
+    _req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let input = r#"
+   ```yaml
+        steps:
+        - step_number: "1"
+            heading: "[Create the Multi-Signature Wallet Smart Contract]"
+            action: create_file
+            details:
+            filename: "MultiSignatureWallet.sol"
+        - step_number: "2"
+            heading: "[Define contract variables and functions within 'MultiSignatureWallet.sol']"
+            action: edit_file
+            details:
+            filename: "MultiSignatureWallet.sol"
+        - step_number: "3"
+            heading: "[Install Solidity compiler if not already installed]"
+            action: install_dependency
+            details:
+            package_name: solc
+        - step_number: "4"
+            heading: "[Compile the Multi-Signature Wallet Smart Contract using 'solc']"
+            action: system_command
+            details:
+            command: "solc --bin MultiSignatureWallet.sol"
+        - step_number: "5"
+            heading: "[Create a deployment script for deploying the contract on Ethereum]"
+            action: create_file
+            details:
+            filename: "deploy.js"
+        - step_number: "6"
+            heading: "[Edit 'deploy.js' to include necessary web3 and truffle dependencies]"
+            action: edit_file
+            details:
+            filename: "deploy.js"
+        - step_number: "7"
+            heading: "[Install Truffle if not already installed]"
+            action: install_dependency
+            details:
+            package_name: truffle
+        - step_number: "8"
+            heading: "[Deploy the Multi-Signature Wallet Smart Contract using 'truffle']"
+            action: system_command
+            details:
+            command: "truffle migrate --network development"
+        - step_number: "9"
+            heading: "[Create a script to handle transaction approvals and execution]"
+            action: create_file
+            details:
+            filename: "approveAndExecute.js"
+        - step_number: "10"
+            heading: "[Edit 'approveAndExecute.js' with the logic for approving transactions by signers]"
+            action: edit_file
+            details:
+            filename: "approveAndExecute.js"
+        - step_number: "11"
+            heading: "[Test transaction approval and execution functionality using Truffle tests or similar framework]"
+            action: run_tests
+        ```
+    "#;
 
+    // Call the custom parser to parse steps
+    let steps = parse_steps(input).unwrap_or_else(|err| {
+        eprintln!("Error parsing steps: {:?}", err);
+        vec![]
+    });    
+    
+    println!("Printing steps now");
+    for step in &steps {
+        println!("{:?}", step);
+    }
+
+    Ok(HttpResponse::Ok().json(steps))
+
+}
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
     data: web::Json<GenerateStepsRequest>,
@@ -229,18 +306,65 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
-    let step_data = match data_validation(&pair_programmer_id, step_number) {
-        Ok(step_data) => step_data, // Proceed if validation succeeds
-        Err(err) => {
-            // Handle validation failure
-            let error_response = ErrorResponse {
-                error: format!("Data validation failed: {}", err),
-            };
-            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
-        }
-    };
+    //fetching the step details that is to be executed
+    let step_number_usize = parse_step_number(step_number).map_err(|err| {
+        actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
+    })?;
 
-    let embeddings_result = generate_text_embedding(&step_data.task_heading).await;
+    //fetching all steps for the pai_programmer_id
+    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
+    let all_steps = steps.iter()
+            .enumerate()
+            .map(|(index, step)| {
+                let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
+                format!("Step: {}. {}", index + 1, heading)
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+    // Format steps executed with response (output all steps before the current step_number)
+    let steps_executed_with_response = steps.iter()
+        .take(step_number_usize)  // Take all steps up to the current step_number
+        .filter(|step| {
+            step.get("tool").and_then(|v| v.as_str()) == Some("edit_file") &&
+            step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false)
+        })
+        .map(|step| {
+            let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
+            let response = step.get("response").and_then(|v| v.as_str()).unwrap_or("No Response");
+            format!("Step: {}\n response: {}\n", heading, response)
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+
+
+
+    
+    let step_result = DB_INSTANCE.fetch_single_step(&pair_programmer_id, step_number);
+
+    let step = match step_result {
+        Ok(step) => step,
+        Err(e) => {
+            error!("Error fetching step {}", e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Error fetching step: {}", e)
+            })));
+        } 
+
+    };
+        
+    // let step_data = match data_validation(&pair_programmer_id, step_number) {
+    //     Ok(step_data) => step_data, // Proceed if validation succeeds
+    //     Err(err) => {
+    //         // Handle validation failure
+    //         let error_response = ErrorResponse {
+    //             error: format!("Data validation failed: {}", err),
+    //         };
+    //         return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+    //     }
+    // };
+
+    let embeddings_result = generate_text_embedding(&step.heading).await;
     let query_embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
         Err(_) => {
@@ -269,15 +393,15 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
     info!("Formatted entries:\n{}", formatted_entries);
     let step_context = format!(
         "{}\nCONTEXT_CODE\n{}",
-        step_data.task_heading.clone(),
+        step.heading.clone(),
         formatted_entries
     );
 
     
     let task_with_context = prompt_with_context(&pair_programmer_id,
-                                                    &step_data.all_steps, 
-                                                    &step_data.steps_executed_response, 
-                                                    &step_data.task_heading, 
+                                                    &all_steps, 
+                                                    &steps_executed_with_response, 
+                                                    &step.heading, 
                                                     &step_context, "");
     // Match the function call and return the appropriate agent
 
@@ -302,7 +426,7 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
     // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step_data.step_number).await;
+        handle_stream_completion_execute(rx, accumulated_content, pair_programmer_id, step.step_number).await;
     });
 
     Ok(response)
@@ -404,10 +528,9 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
-    let step_number = parse_step_number(step_number).map_err(|err| {
-        actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
-    })?;
-    let true_step_number = step_number - 1;
+    // let step_number = parse_step_number(step_number).map_err(|err| {
+    //     actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
+    // })?;
 
 
     //Prompt by the user to make changes to the code
@@ -513,66 +636,66 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
 
 
 
-#[post("/pair-programmer/steps/rethink")]
-pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
-    let data: Result<web::Json<RethinkRequest>, Error> = web::Json::<RethinkRequest>::from_request(&req, &mut payload.into_inner()).await;
-    let valid_data = match data {
-        Ok(valid_data) => {
-            // Check if fields are empty and return early if any field is missing
-            if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
-                let error_response = ErrorResponse {
-                    error: "Missing required fields: pair_programmer_id or step_number".to_string(),
-                };
-                return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
-            }
+// #[post("/pair-programmer/steps/rethink")]
+// pub async fn rethink_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
+//     let data: Result<web::Json<RethinkRequest>, Error> = web::Json::<RethinkRequest>::from_request(&req, &mut payload.into_inner()).await;
+//     let valid_data = match data {
+//         Ok(valid_data) => {
+//             // Check if fields are empty and return early if any field is missing
+//             if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
+//                 let error_response = ErrorResponse {
+//                     error: "Missing required fields: pair_programmer_id or step_number".to_string(),
+//                 };
+//                 return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+//             }
 
-            valid_data.into_inner() // Proceed if validation passes
-        }
-        Err(err) => {
-            // Handle invalid JSON error
-            let error_response = ErrorResponse {
-                error: format!("Invalid JSON payload: {}", err),
-            };
-            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
-        }
-    };
+//             valid_data.into_inner() // Proceed if validation passes
+//         }
+//         Err(err) => {
+//             // Handle invalid JSON error
+//             let error_response = ErrorResponse {
+//                 error: format!("Invalid JSON payload: {}", err),
+//             };
+//             return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
+//         }
+//     };
 
-    let pair_programmer_id = valid_data.pair_programmer_id.clone();
-    let step_number = &valid_data.step_number;
+//     let pair_programmer_id = valid_data.pair_programmer_id.clone();
+//     let step_number = &valid_data.step_number;
 
-    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
+//     let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
 
     
 
-    let task_with_context=   rethink_prompt_with_context(
-                                &step_data.all_steps, 
-                                &step_data.steps_executed_response, 
-                                &step_data.task_heading, 
-                                &step_data.step_chat);
-    // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new("rethinker", task_with_context)?;
+//     let task_with_context=   rethink_prompt_with_context(
+//                                 &step_data.all_steps, 
+//                                 &step_data.steps_executed_response, 
+//                                 &step_data.task_heading, 
+//                                 &step_data.step_chat);
+//     // Match the function call and return the appropriate agent
+//     let agent = AgentEnum::new("rethinker", task_with_context)?;
 
-    let accumulated_content = Arc::new(Mutex::new(String::new()));
-    let accumulated_content_clone = Arc::clone(&accumulated_content);
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+//     let accumulated_content = Arc::new(Mutex::new(String::new()));
+//     let accumulated_content_clone = Arc::clone(&accumulated_content);
+//     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
-    // Start streaming and sending data to the client
-    let response = stream_to_client(
-        &client,
-        agent,
-        pair_programmer_id.clone(),
-        accumulated_content_clone,
-        tx,
-    ).await?;
+//     // Start streaming and sending data to the client
+//     let response = stream_to_client(
+//         &client,
+//         agent,
+//         pair_programmer_id.clone(),
+//         accumulated_content_clone,
+//         tx,
+//     ).await?;
 
-    // Spawn a separate task to handle the stream completion
-    tokio::spawn(async move {
-        handle_stream_completion_rethinker(rx, accumulated_content, pair_programmer_id, step_data.step_number).await;
-    });
+//     // Spawn a separate task to handle the stream completion
+//     tokio::spawn(async move {
+//         handle_stream_completion_rethinker(rx, accumulated_content, pair_programmer_id, step_data.step_number).await;
+//     });
 
-    Ok(response)
+//     Ok(response)
 
-}
+// }
 
 async fn stream_to_client(
     client: &Client,
@@ -630,31 +753,31 @@ async fn stream_to_client(
     Ok(response)
 }
 
-async fn handle_stream_completion_rethinker(
-    rx: tokio::sync::oneshot::Receiver<()>,
-    accumulated_content: Arc<Mutex<String>>,
-    _pair_programmer_id: String,
-    _step_number: usize
-) {
-    // Wait until the channel receives the completion signal
-    let _ = rx.await;
+// async fn handle_stream_completion_rethinker(
+//     rx: tokio::sync::oneshot::Receiver<()>,
+//     accumulated_content: Arc<Mutex<String>>,
+//     _pair_programmer_id: String,
+//     _step_number: usize
+// ) {
+//     // Wait until the channel receives the completion signal
+//     let _ = rx.await;
 
-    // Unwrap the accumulated content after streaming is done
-    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-        .unwrap_or_else(|_| Mutex::new(String::new()))
-        .into_inner()
-        .unwrap();
+//     // Unwrap the accumulated content after streaming is done
+//     let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+//         .unwrap_or_else(|_| Mutex::new(String::new()))
+//         .into_inner()
+//         .unwrap();
 
-    // Print the accumulated content after streaming is completed
-    println!("Final accumulated content: {}", accumulated_content_final);
+//     // Print the accumulated content after streaming is completed
+//     println!("Final accumulated content: {}", accumulated_content_final);
 
-    // Update step chat in the database after the stream completes
-    // if let Err(err) = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &accumulated_content_final) {
-    //     error!("Error updating chats array pair_programmer_id {} and step {}: {:?}", pair_programmer_id, step_number, err);
-    // } else {
-    //     debug!("DB Update successful for chat array pair_programmer_id {} and step {}", pair_programmer_id, step_number);
-    // }
-}
+//     // Update step chat in the database after the stream completes
+//     // if let Err(err) = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &accumulated_content_final) {
+//     //     error!("Error updating chats array pair_programmer_id {} and step {}: {:?}", pair_programmer_id, step_number, err);
+//     // } else {
+//     //     debug!("DB Update successful for chat array pair_programmer_id {} and step {}", pair_programmer_id, step_number);
+//     // }
+// }
 
 
 
@@ -662,7 +785,7 @@ async fn handle_stream_completion_execute(
     rx: tokio::sync::oneshot::Receiver<()>,
     accumulated_content: Arc<Mutex<String>>,
     pair_programmer_id: String,
-    step_number: usize
+    step_number: String
 ) {
     // Wait until the channel receives the completion signal
     let _ = rx.await;
@@ -706,7 +829,7 @@ async fn handle_stream_completion_planner(
     
     info!("Json data {}", json_data);
     // Attempt to parse and handle errors gracefully
-    let steps: Vec<crate::pair_programmer::types::Step> = match parse_steps(&json_data) {
+    let steps: Vec<crate::pair_programmer::types::PairProgrammerStepRaw> = match parse_steps(&json_data) {
         Ok(parsed_steps) => parsed_steps,
         Err(e) => {
             eprintln!("Failed to parse JSON: {}", e);
@@ -731,7 +854,7 @@ async fn handle_stream_completion_chat(
     accumulated_content: Arc<Mutex<String>>,
     pair_programmer_id: String,
     prompt: &str,
-    step_number: usize, 
+    step_number: String, 
     response: String
 ) {
     // Wait until the channel receives the completion signal

@@ -1,35 +1,30 @@
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-#[derive(Debug)]
-pub struct StepData {
-    pub step_number: usize,
-    pub task_heading: String,
-    pub function_call: String,
-    pub step_chat: String,
-    pub all_steps: String,
-    pub steps_executed_response: String,
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StepDetails {
-    filename: Option<String>,
-    directory: Option<String>,
-    command: Option<String>,
-    package_name: Option<String>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Step {
-    pub step_number: String,
-    pub heading: String,
-    pub action: String,
-    pub details: StepDetails,
-}
 
 #[derive(Deserialize, Debug)]
 pub struct StepsWrapper {
-    pub steps: Vec<Step>,
+    pub steps: Vec<PairProgrammerStepRaw>,
+}
+
+
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct StepDetails {
+//     pub filename: Option<String>,
+//     pub directory: Option<String>,
+//     pub command: Option<String>,
+//     pub package_name: Option<String>
+// }
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PairProgrammerStepRaw {
+    pub step_number: String,
+    pub heading: String,
+    pub action: String,
+    pub details: HashMap<String, String>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -38,11 +33,13 @@ pub struct StepChat{
     pub response: String
 }
 
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PairProgrammerStep {
-    pub step_number: usize,
+    pub step_number: String,
     pub heading: String,
-    pub tool: String,
+    pub action: String,
+    pub details: HashMap<String, String>,
     pub response: String,
     pub executed: bool,
     pub chats: Vec<StepChat>,
@@ -51,9 +48,10 @@ pub struct PairProgrammerStep {
 impl PairProgrammerStep {
     // Constructor for StepData to simplify creation
     pub fn new(
-        step_number: usize,
+        step_number: String,
         heading: String,
-        tool: String,
+        action: String,
+        details: HashMap<String, String>,
         response: String,
         executed: bool,
         chats: Vec<StepChat>,
@@ -62,7 +60,8 @@ impl PairProgrammerStep {
         Self {
             step_number,
             heading,
-            tool,
+            action,
+            details,
             response,
             executed,
             chats
