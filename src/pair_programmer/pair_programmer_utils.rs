@@ -174,7 +174,6 @@ pub fn prompt_with_context(
     steps_executed: &str, 
     current_step: &str, 
     additional_context_from_codebase: &str, 
-    recent_discussion: &str
 ) -> String {
 
     let original_task = DB_INSTANCE.fetch_task_from_pair_programmer(&pair_programmer_id).unwrap();
@@ -185,14 +184,12 @@ pub fn prompt_with_context(
         executed_steps: {steps_executed}
         current_step: {current_step}
         overall_context: {additional_context_from_codebase}
-        recent_discussion: {recent_discussion}
-        Please implement the current step based on this context. Ensure your response follows the specified output format in the system prompt.
+        Please implement the current step based on this overall_context. Ensure your response follows the specified output format in the system prompt.
         "#,
         all_steps = all_steps,
         steps_executed = steps_executed,
         current_step = current_step,
         additional_context_from_codebase = additional_context_from_codebase,
-        recent_discussion = recent_discussion
     )
 }
 

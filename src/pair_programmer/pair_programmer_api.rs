@@ -334,9 +334,6 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
         })
         .collect::<Vec<String>>()
         .join("\n");
-
-
-
     
     let step_result = DB_INSTANCE.fetch_single_step(&pair_programmer_id, step_number);
 
@@ -350,7 +347,12 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
         } 
 
     };
-        
+    
+    if step.action != "edit_file"{
+        let db_response = DB_INSTANCE.update_step_execution(&pair_programmer_id.clone(), &step_number.to_string(), "");
+        return Ok(HttpResponse::Ok().json(json!({"message": "Marked as executed"})));
+    }
+
     // let step_data = match data_validation(&pair_programmer_id, step_number) {
     //     Ok(step_data) => step_data, // Proceed if validation succeeds
     //     Err(err) => {
@@ -400,7 +402,7 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
                                                     &all_steps, 
                                                     &steps_executed_with_response, 
                                                     &step.heading, 
-                                                    &step_context, "");
+                                                    &step_context);
     // Match the function call and return the appropriate agent
 
     info!("Task With COntext:\n{}", task_with_context);
@@ -870,15 +872,12 @@ async fn handle_stream_completion_chat(
     if response == ""{
         info!("The task hasnt been executed and hence the task heading will be updated by the LLM response");
         //if response is not empty that means the modifycode agent has been executed and it updates the repsonse
-        db_response = DB_INSTANCE.update_step_response(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+        db_response = DB_INSTANCE.update_step_heading(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
 
     }else{
         //if response is empty that means the modifystep agent has been executed and it updates the task heading
-        db_response = DB_INSTANCE.update_step_heading(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
-
+        db_response = DB_INSTANCE.update_step_response(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
     }
-
-
 
     // let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
     match  db_response {

@@ -32,8 +32,10 @@ impl Agent for ModifyCodeAgent {
         Output Format:
 
         Code Implementation:
-        [Your code here]
+        [Your code here, with explanations as comments in the language of the code]
 
+
+        [Your Explanation here]
         Clarification Check:
         Before executing this step, if there are any ambiguous details or if further clarification is required, please prompt the user to confirm or clarify the specifics of the step.
 
