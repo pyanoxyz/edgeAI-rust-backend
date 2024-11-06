@@ -7,5 +7,6 @@ pub mod agent_native_llm;
 pub mod agent_rethinker;
 pub mod agent_enum;
 pub mod pair_programmer_utils;
-pub mod agent_chat;
+pub mod agent_modifycode;
+pub mod agent_modifystep;
 pub mod types;

@@ -4,11 +4,55 @@ use chrono::Utc; // For getting the current UTC timestamp
 use rusqlite::params;
 use serde_json::{json, Value};
 use crate::database::db_config::DBConfig;
-use crate::pair_programmer::types::{Step, StepChat};
+use crate::pair_programmer::types::{Step, StepChat, PairProgrammerStep};
 use log::info;
 use std::error::Error;
 
 impl DBConfig{
+    pub fn fetch_single_step(
+        &self,
+        pair_programmer_id: &str,
+        step_number: usize,
+    ) -> Result<PairProgrammerStep, Box<dyn Error>> {
+        // Lock the mutex to access the connection
+         // Lock the mutex to access the connection
+         let connection = self.pair_programmer_connection.lock()
+         .map_err(|_| "Failed to acquire lock for connection")?;
+
+        // Construct the step_id from pair_programmer_id and step_number
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    
+        // Query to fetch a single step
+        let mut stmt = connection.prepare(
+            "SELECT heading, function_call, executed, response, chat
+             FROM pair_programmer_steps
+             WHERE id = ?",
+        ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    
+        // Execute the query and map the result
+        let step = stmt.query_row(rusqlite::params![step_id], |row| {
+            let heading: String = row.get(0)?;
+            let function_call: String = row.get(1)?;
+            let executed: bool = row.get(2)?;
+            let response: String = row.get(3)?;
+            let chat: String = row.get(4)?;
+    
+            let chats: Vec<StepChat> = serde_json::from_str(&chat).map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+            })?;
+           // Create PairProgrammerStep using the constructor
+            Ok(PairProgrammerStep::new(
+                step_number,
+                heading,
+                function_call,
+                response,
+                executed,
+                chats,
+            ))
+        }).map_err(|e| format!("Failed to fetch pair_programmer_step record: {}", e))?;
+    
+        Ok(step)
+    }
 
     // pub fn generate_pair_programmer_id() -> u64 {
     //     let mut rng = rand::thread_rng();
@@ -200,6 +244,107 @@ impl DBConfig{
     
         // Return the whole formatted string
         Ok(formatted_string)
+    }
+
+    pub fn update_step_heading(
+        &self,
+        pair_programmer_id: &str, step_number: &str,
+        prompt: &str,
+        response: &str
+    ) -> Result<(), Box<dyn Error>> {
+        
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock()
+            .map_err(|_| "Failed to acquire lock for connection")?;
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    
+        // Fetch the existing chat history for the step
+        let mut stmt = connection.prepare("SELECT heading, chat FROM pair_programmer_steps WHERE id = ?")?;
+        let (existing_heading, chat_json): (String, String) = stmt.query_row([step_id.clone()], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        }).map_err(|_| "Failed to retrieve heading and chat for the given step_id")?;
+        
+        // Deserialize the chat history into a Vec<StepChat>
+        let mut chat_history: Vec<StepChat> = serde_json::from_str(&chat_json)
+            .map_err(|_| "Failed to deserialize chat history")?;
+        
+        // Add the new chat entry
+        let new_chat_entry = StepChat {
+            prompt: prompt.to_string(),
+            response: response.to_string(),
+        };
+        chat_history.push(new_chat_entry);
+        
+        // Serialize the updated chat history
+        let updated_chat_json = serde_json::to_string(&chat_history)
+            .map_err(|_| "Failed to serialize updated chat history")?;
+        
+        // Update the step record with the new task heading and chat
+        connection.execute(
+            "UPDATE pair_programmer_steps
+                SET heading = ?, chat = ?
+                WHERE id = ?",
+            params![
+                response,
+                updated_chat_json,
+                step_id,
+            ],
+        ).map_err(|e| format!("Failed to update pair_programmer_steps record: {}", e))?;
+        
+        info!("Updated step_id {} with new heading and chat entry", step_id);
+        
+        Ok(())
+    }
+
+
+    pub fn update_step_response(
+        &self,
+        pair_programmer_id: &str, step_number: &str,
+        prompt: &str,
+        response: &str
+    ) -> Result<(), Box<dyn Error>> {
+        
+        // Lock the mutex to access the connection
+        let connection = self.pair_programmer_connection.lock()
+            .map_err(|_| "Failed to acquire lock for connection")?;
+        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    
+        // Fetch the existing chat history for the step
+        let mut stmt = connection.prepare("SELECT response, chat FROM pair_programmer_steps WHERE id = ?")?;
+        let (existing_heading, chat_json): (String, String) = stmt.query_row([step_id.clone()], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        }).map_err(|_| "Failed to retrieve heading and chat for the given step_id")?;
+        
+        // Deserialize the chat history into a Vec<StepChat>
+        let mut chat_history: Vec<StepChat> = serde_json::from_str(&chat_json)
+            .map_err(|_| "Failed to deserialize chat history")?;
+        
+        // Add the new chat entry
+        let new_chat_entry = StepChat {
+            prompt: prompt.to_string(),
+            response: response.to_string(),
+        };
+        chat_history.push(new_chat_entry);
+        
+        // Serialize the updated chat history
+        let updated_chat_json = serde_json::to_string(&chat_history)
+            .map_err(|_| "Failed to serialize updated chat history")?;
+        
+        // Update the step record with the new task heading and chat
+        connection.execute(
+            "UPDATE pair_programmer_steps
+                SET response = ?, chat = ?
+                WHERE id = ?",
+            params![
+                response,
+                updated_chat_json,
+                step_id,
+            ],
+        ).map_err(|e| format!("Failed to update pair_programmer_steps record: {}", e))?;
+        
+        info!("Updated step_id {} with new heading and chat entry", step_id);
+        
+        Ok(())
     }
 
     // pub fn get_step_chat(&self, pair_programmer_id: &str, step_number: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {

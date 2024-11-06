@@ -42,6 +42,8 @@ impl Agent for PlannerAgent {
               "details": {
                 "filename": "[filename if applicable]",
                 "directory": "[directory if applicable]",
+                "package_name": "[packages to be installed if applicable]"
+                "command": "[Command to be executed if applicable]"
               }
             },
             ...
@@ -71,6 +73,7 @@ impl Agent for PlannerAgent {
       - **Output only the number of steps necessary to solve the problem, with no upper limit.**
       - DO NOT hallucinate actions or scripts, and MUST ADHERE TO THE OUTPUT FORMAT strictly.
       - MUST NOT provide any comments, JUST PURE JSON.
+      - AVOID trailing comma in the end ERROR
       
         "#;
         return system_prompt.to_string()

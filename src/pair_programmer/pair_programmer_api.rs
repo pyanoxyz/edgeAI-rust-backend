@@ -68,7 +68,6 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
     .service(get_steps)
     .service(execute_step)
     .service(chat_step)
-    .service(chat_summary)
     .service(rethink_step);
 }
 
@@ -310,73 +309,73 @@ pub async fn execute_step(payload: web::Payload, client: web::Data<Client>, req:
 
 }
 
-#[post("/pair-programmer/steps/chat_summary")]
-pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
+// #[post("/pair-programmer/steps/chat_summary")]
+// pub async fn chat_summary(payload: web::Payload, req: HttpRequest) -> Result<HttpResponse, Error> {
     
-    let data: Result<web::Json<SummarizeChatRequest>, Error> = web::Json::<SummarizeChatRequest>::from_request(&req, &mut payload.into_inner()).await;
-    let valid_data = match data {
-        Ok(valid_data) => {
-            // Check if fields are empty and return early if any field is missing
-            if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
-                let error_response = ErrorResponse {
-                    error: "Missing required fields: pair_programmer_id or step_number".to_string(),
-                };
-                return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
-            }
+//     let data: Result<web::Json<SummarizeChatRequest>, Error> = web::Json::<SummarizeChatRequest>::from_request(&req, &mut payload.into_inner()).await;
+//     let valid_data = match data {
+//         Ok(valid_data) => {
+//             // Check if fields are empty and return early if any field is missing
+//             if valid_data.pair_programmer_id.trim().is_empty() || valid_data.step_number.trim().is_empty() {
+//                 let error_response = ErrorResponse {
+//                     error: "Missing required fields: pair_programmer_id or step_number".to_string(),
+//                 };
+//                 return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if validation fails
+//             }
 
-            valid_data.into_inner() // Proceed if validation passes
-        }
-        Err(err) => {
-            // Handle invalid JSON error
-            let error_response = ErrorResponse {
-                error: format!("Invalid JSON payload: {}", err),
-            };
-            return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
-        }
-    };
+//             valid_data.into_inner() // Proceed if validation passes
+//         }
+//         Err(err) => {
+//             // Handle invalid JSON error
+//             let error_response = ErrorResponse {
+//                 error: format!("Invalid JSON payload: {}", err),
+//             };
+//             return Ok(HttpResponse::BadRequest().json(error_response)); // Return early if JSON is invalid
+//         }
+//     };
     
-    let pair_programmer_id = valid_data.pair_programmer_id.clone();
-    let step_number = parse_step_number(&valid_data.step_number)?;
-    info!("step_number={}", step_number);
+//     let pair_programmer_id = valid_data.pair_programmer_id.clone();
+//     let step_number = parse_step_number(&valid_data.step_number)?;
+//     info!("step_number={}", step_number);
 
-    let step_chat = match DB_INSTANCE.step_chat_string(&pair_programmer_id, &step_number.to_string()){
-        Ok(chat) => chat,
-        Err(err) => {
-            let error_response = ErrorResponse{
-                error: format!("Failed to retrieve chat: {}", err),
-            };
-            return Ok(HttpResponse::InternalServerError().json(error_response));
-        }
-    };
+//     let step_chat = match DB_INSTANCE.step_chat_string(&pair_programmer_id, &step_number.to_string()){
+//         Ok(chat) => chat,
+//         Err(err) => {
+//             let error_response = ErrorResponse{
+//                 error: format!("Failed to retrieve chat: {}", err),
+//             };
+//             return Ok(HttpResponse::InternalServerError().json(error_response));
+//         }
+//     };
 
-    let result = get_attention_scores(&step_chat).await;
-    let tokens = match result {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            let error_response = ErrorResponse {
-                            error: format!("Failed to summarize chat: {}", e),
-                        };
-                        return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
-        }
-    };
+//     let result = get_attention_scores(&step_chat).await;
+//     let tokens = match result {
+//         Ok(tokens) => tokens,
+//         Err(e) => {
+//             let error_response = ErrorResponse {
+//                             error: format!("Failed to summarize chat: {}", e),
+//                         };
+//                         return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
+//         }
+//     };
 
-    let embeddings_result = generate_text_embedding(&step_chat).await;
-    match embeddings_result {
-        Ok(embeddings) => embeddings,
-        Err(e) =>  {
-            let error_response = ErrorResponse {
-                            error: format!("Failed to summarize chat: {}", e),
-                        };
-                        return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
-        },
-    };
+//     let embeddings_result = generate_text_embedding(&step_chat).await;
+//     match embeddings_result {
+//         Ok(embeddings) => embeddings,
+//         Err(e) =>  {
+//             let error_response = ErrorResponse {
+//                             error: format!("Failed to summarize chat: {}", e),
+//                         };
+//                         return Ok(HttpResponse::InternalServerError().json(error_response)); // Handle;
+//         },
+//     };
 
-    let compressed_prompt = tokens.join(" ");
-    debug!("Compressed Prompt {:?}", compressed_prompt);
+//     let compressed_prompt = tokens.join(" ");
+//     debug!("Compressed Prompt {:?}", compressed_prompt);
 
-    let summary = summarize_text(&step_chat).await.unwrap();
-    Ok(HttpResponse::Ok().json(json!({ "summary": summary })))
-}
+//     let summary = summarize_text(&step_chat).await.unwrap();
+//     Ok(HttpResponse::Ok().json(json!({ "summary": summary })))
+// }
 
 #[post("/pair-programmer/steps/chat")]
 pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: HttpRequest) -> Result<HttpResponse, Error> {
@@ -405,19 +404,89 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
 
     let pair_programmer_id = valid_data.pair_programmer_id.clone();
     let step_number = &valid_data.step_number;
+    let step_number = parse_step_number(step_number).map_err(|err| {
+        actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
+    })?;
+    let true_step_number = step_number - 1;
+
+
+    //Prompt by the user to make changes to the code
     let prompt = valid_data.prompt.clone();
 
-    let step_data = data_validation(&pair_programmer_id, step_number).unwrap();
+    let step_result = DB_INSTANCE.fetch_single_step(&pair_programmer_id, step_number);
 
-    
-    let task_with_context=   prompt_with_context_for_chat(
-                    &step_data.all_steps, 
-                    &step_data.steps_executed_response, 
-                    &step_data.task_heading, 
-                    &prompt, "");
+    let step = match step_result {
+        Ok(step) => step,
+        Err(e) => {
+            error!("Error fetching step {}", e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Error fetching step: {}", e)
+            })));
+        } 
+
+    };
+
+    //Generate embeddings for the task
+    let embeddings_result = generate_text_embedding(&step.heading).await;
+    let query_embeddings = match embeddings_result {
+        Ok(embeddings) => embeddings,
+        Err(_) => {
+            return Ok(
+                HttpResponse::BadRequest().json(
+                    serde_json::json!({
+            "message": "No Matching result found", 
+            "result": []
+        })
+                )
+            );
+        }
+    };
+
+    //Search index if there are any matching code snippets in the whole code repo - matching with task heading
+    let chunk_ids = search_index(&pair_programmer_id, query_embeddings.clone(), 20);
+
+    //  let file_path, chunk_type, content, session_id;
+    // chunk_ids will give the u64 unique ids of the code chunks stored in the index, This
+    //step will fetch the actual code snippets from the database
+    let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
+    info!("All the matching entries {:?}", entries);
+    let formatted_entries: String = entries
+        .iter()
+        .map(|(file_path, _, content, _)| format!("{}\n{}", file_path, content))
+        .collect::<Vec<String>>()
+        .join("\n\n");
+
+    info!("Formatted entries:\n{}", formatted_entries);
+
+    //fetching all steps for the pai_programmer_id
+    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
+    let all_steps = steps.iter()
+            .enumerate()
+            .map(|(index, step)| {
+                let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
+                format!("Step: {}. {}", index + 1, heading)
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+    let user_prompt_with_context = format!(
+        "ALL_STEPS ={}\nTASK ={}\nRESPONSE = {}\nCONTEXT_CODE = {}\n USER_PROMPT={}",
+        all_steps,
+        step.heading.clone(),
+        step.response,
+        formatted_entries,
+        prompt
+    );
     // Match the function call and return the appropriate agent
-    let agent = AgentEnum::new("chat", task_with_context)?;
-
+    let agent;
+    if step.response == ""{
+        info!("The task hasnt been executed and hence the task heading will be updated by the LLM response");
+        agent = AgentEnum::new("modifystep", user_prompt_with_context)?;
+    }else{
+        info!("The task has been executed and hence the code will be modified by the llm response");
+        agent = AgentEnum::new("modifycode", user_prompt_with_context)?;
+    }
+    
     // This variable will accumulate the entire content of the stream
 
     let accumulated_content = Arc::new(Mutex::new(String::new()));
@@ -435,7 +504,7 @@ pub async fn chat_step(payload: web::Payload, client: web::Data<Client>, req: Ht
 
     // Spawn a separate task to handle the stream completion
     tokio::spawn(async move {
-        handle_stream_completion_chat(rx, accumulated_content, pair_programmer_id, &prompt, step_data.step_number).await;
+        handle_stream_completion_chat(rx, accumulated_content, pair_programmer_id, &prompt, step.step_number, step.response).await;
     });
 
     Ok(response)
@@ -587,31 +656,7 @@ async fn handle_stream_completion_rethinker(
     // }
 }
 
-async fn handle_stream_completion_chat(
-    rx: tokio::sync::oneshot::Receiver<()>,
-    accumulated_content: Arc<Mutex<String>>,
-    pair_programmer_id: String,
-    prompt: &str,
-    step_number: usize
-) {
-    // Wait until the channel receives the completion signal
-    let _ = rx.await;
 
-    // Unwrap the accumulated content after streaming is done
-    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
-        .unwrap_or_else(|_| Mutex::new(String::new()))
-        .into_inner()
-        .unwrap();
-
-    // Print the accumulated content after streaming is completed
-    println!("Final accumulated content: {}", accumulated_content_final);
-
-    let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
-    match  db_response {
-        Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
-        Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
-    }
-}
 
 async fn handle_stream_completion_execute(
     rx: tokio::sync::oneshot::Receiver<()>,
@@ -677,5 +722,46 @@ async fn handle_stream_completion_planner(
     match  db_response {
         Ok(_) => {debug!("DB Update successful for planning the task at id {} and number of steps step {}", pair_programmer_id, steps.len())},
         Err(err) => {error!("Error inserting for planning the task at id {} and number of steps step {} with error {:?}",  pair_programmer_id, steps.len(), err);}
+    }
+}
+
+
+async fn handle_stream_completion_chat(
+    rx: tokio::sync::oneshot::Receiver<()>,
+    accumulated_content: Arc<Mutex<String>>,
+    pair_programmer_id: String,
+    prompt: &str,
+    step_number: usize, 
+    response: String
+) {
+    // Wait until the channel receives the completion signal
+    let _ = rx.await;
+
+    // Unwrap the accumulated content after streaming is done
+    let accumulated_content_final = Arc::try_unwrap(accumulated_content)
+        .unwrap_or_else(|_| Mutex::new(String::new()))
+        .into_inner()
+        .unwrap();
+
+    // Print the accumulated content after streaming is completed
+    println!("Final accumulated content: {}", accumulated_content_final);
+    let db_response;
+    if response == ""{
+        info!("The task hasnt been executed and hence the task heading will be updated by the LLM response");
+        //if response is not empty that means the modifycode agent has been executed and it updates the repsonse
+        db_response = DB_INSTANCE.update_step_response(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+
+    }else{
+        //if response is empty that means the modifystep agent has been executed and it updates the task heading
+        db_response = DB_INSTANCE.update_step_heading(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+
+    }
+
+
+
+    // let db_response = DB_INSTANCE.update_step_chat(&pair_programmer_id.clone(), &step_number.to_string(), &prompt, &accumulated_content_final);
+    match  db_response {
+        Ok(_) => {debug!("DB Update successful for chat array pair_programmer_id {} and  step {}", pair_programmer_id, step_number)},
+        Err(err) => {error!("Error updating chats array pair_programmer_id {} and  step {}: {:?}",  pair_programmer_id, step_number, err);}
     }
 }
