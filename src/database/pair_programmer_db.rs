@@ -172,13 +172,15 @@ impl DBConfig{
         // Execute the query and iterate over the rows, collecting them into the vector
         let step_iter = stmt
             .query_map([pair_programmer_id], |row| {
+                let details_str: String = row.get(5)?;
+                let details: HashMap<String, String> = serde_json::from_str(&details_str).unwrap_or_default();
                 Ok(json!({
                     "step_id": row.get::<_, String>(0)?,         // step_id
                     "user_id": row.get::<_, String>(1)?,         // user_id
                     "session_id": row.get::<_, String>(2)?,      // session_id
                     "heading": row.get::<_, String>(3)?,         // heading
                     "action": row.get::<_, String>(4)?,   // function_call
-                    "details": row.get::<_, String>(5)?,   // function_call
+                    "details": details,   // function_call
                     "executed": row.get::<_, bool>(6)?,          // executed (boolean)
                     "response": row.get::<_, String>(7)?,        // response
                     "chat": row.get::<_, String>(8)?,            // chat (assuming it's serialized as JSON or a string)
