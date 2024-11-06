@@ -20,7 +20,7 @@ mod prompt_compression;
 mod parser;
 mod rag;
 mod pair_programmer;
-mod summarization;
+// mod summarization;
 mod model_state;
 mod llm_stream;
 mod context;

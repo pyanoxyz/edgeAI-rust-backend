@@ -1,10 +1,8 @@
 
-use serde_json::Value; // For handling JSON data
 use actix_web:: Error;
 use crate::database::db_config::DB_INSTANCE;
-use super::types::{ PairProgrammerStep, StepsWrapper, PairProgrammerStepRaw};
+use super::types::PairProgrammerStepRaw;
 use regex::Regex;
-use actix_web::error::ErrorInternalServerError;
 use std::collections::HashMap;
 
 
@@ -90,100 +88,53 @@ pub fn parse_step_number(step_number_str: &str) -> Result<usize, Error> {
         .map_err(|_| actix_web::error::ErrorBadRequest("Invalid step number: unable to convert to a valid number"))
 }
 
-/// Validates whether a specified step can be executed in a sequence of steps.
-///
-/// This function performs several checks to ensure that the provided step can be executed:
-/// 1. Ensures the step number is within the valid range of steps.
-/// 2. Ensures that all previous steps have been executed before the specified step can be executed.
-/// 3. Ensures the specified step has not already been executed.
-///
-/// # Arguments
-///
-/// * `step_number` - The 1-based index of the step to validate.
-/// * `steps` - A vector of `serde_json::Value` representing the steps. Each step must be a JSON object
-///             that contains an `"executed"` field, which indicates whether the step has already been executed.
-///
-/// # Returns
-///
-/// * `Ok(())` - If the specified step can be executed.
-/// * `Err(Error)` - If validation fails due to one of the following reasons:
-///     - The step number is out of bounds.
-///     - A previous step has not been executed.
-///     - The current step has already been executed.
-///     - Invalid step format (the step data is not a JSON object).
-///
-/// # Errors
-///
-/// * `ErrorBadRequest` - Returned if:
-///     - The step number is out of bounds.
-///     - A previous step has not been executed.
-///     - The current step has already been executed.
-/// * `ErrorInternalServerError` - Returned if the step data is in an invalid format.
-///
-/// # Example
-///
-/// ```
-/// let steps = vec![
-///     json!({"executed": true}),
-///     json!({"executed": false}),
-///     json!({"executed": false}),
-/// ];
-///
-/// let step_number = 2;
-/// match validate_steps(step_number, &steps) {
-///     Ok(()) => println!("Step can be executed."),
-///     Err(e) => println!("Error: {}", e),
-/// }
-/// ```
-///
-/// In this example, the function will allow the second step to be executed only if the first step has already been executed
-/// and the second step itself has not been executed yet.
 
-pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Result<(), Error> {
 
-    if step_number > steps.len() {
-        return Err(actix_web::error::ErrorBadRequest(
-            format!("Step number {} is out of bounds, there are only {} steps", step_number, steps.len()),
-        ));
-    }
+// pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Result<(), Error> {
 
-    for (index, step) in steps.into_iter().enumerate() {
-        let actual_index = index + 1; // Start enumeration from 1
+//     if step_number > steps.len() {
+//         return Err(actix_web::error::ErrorBadRequest(
+//             format!("Step number {} is out of bounds, there are only {} steps", step_number, steps.len()),
+//         ));
+//     }
 
-        // Access step data as an object
-        let step_data = step.as_object().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("Invalid step data format")
-        })?;
+//     for (index, step) in steps.into_iter().enumerate() {
+//         let actual_index = index + 1; // Start enumeration from 1
 
-        // Check if the current step is the one we want to execute
-        if actual_index == step_number {
-            let executed = step_data.get("executed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+//         // Access step data as an object
+//         let step_data = step.as_object().ok_or_else(|| {
+//             actix_web::error::ErrorInternalServerError("Invalid step data format")
+//         })?;
 
-            // If the step is already executed, return an error
-            if executed {
-                return Err(actix_web::error::ErrorBadRequest(
-                    format!("Step {} has already been executed", step_number),
-                ));
-            }
-        }
+//         // Check if the current step is the one we want to execute
+//         if actual_index == step_number {
+//             let executed = step_data.get("executed")
+//                 .and_then(|v| v.as_bool())
+//                 .unwrap_or(false);
 
-        // Ensure that all previous steps are executed
-        // if actual_index < step_number {
-        //     let previous_executed = step_data.get("executed")
-        //         .and_then(|v| v.as_bool())
-        //         .unwrap_or(false);
+//             // If the step is already executed, return an error
+//             if executed {
+//                 return Err(actix_web::error::ErrorBadRequest(
+//                     format!("Step {} has already been executed", step_number),
+//                 ));
+//             }
+//         }
 
-        //     if !previous_executed {
-        //         return Err(actix_web::error::ErrorBadRequest(
-        //             format!("Previous step {} has not been executed", actual_index),
-        //         ));
-        //     }
-        // }
-    }
-    Ok(())
-}
+//         // Ensure that all previous steps are executed
+//         // if actual_index < step_number {
+//         //     let previous_executed = step_data.get("executed")
+//         //         .and_then(|v| v.as_bool())
+//         //         .unwrap_or(false);
+
+//         //     if !previous_executed {
+//         //         return Err(actix_web::error::ErrorBadRequest(
+//         //             format!("Previous step {} has not been executed", actual_index),
+//         //         ));
+//         //     }
+//         // }
+//     }
+//     Ok(())
+// }
 
 
 // pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String) {
@@ -245,49 +196,49 @@ pub fn prompt_with_context(
     )
 }
 
-pub fn prompt_with_context_for_chat(
-    all_steps: &str, 
-    steps_executed: &str, 
-    current_step: &str, 
-    user_prompt: &str, 
-    recent_discussion: &str
-) -> String {
-    format!(
-        r#"
-        all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
-        current_step: {current_step}
-        recent_discussion: {recent_discussion}
-        Please respond to user query {user_prompt} based on the context.
-        "#,
-        all_steps = all_steps,
-        steps_executed = steps_executed,
-        current_step = current_step,
-        user_prompt = user_prompt,
-        recent_discussion = recent_discussion
-    )
-}
+// pub fn prompt_with_context_for_chat(
+//     all_steps: &str, 
+//     steps_executed: &str, 
+//     current_step: &str, 
+//     user_prompt: &str, 
+//     recent_discussion: &str
+// ) -> String {
+//     format!(
+//         r#"
+//         all_steps: {all_steps}
+//         steps_executed_so_far: {steps_executed}
+//         current_step: {current_step}
+//         recent_discussion: {recent_discussion}
+//         Please respond to user query {user_prompt} based on the context.
+//         "#,
+//         all_steps = all_steps,
+//         steps_executed = steps_executed,
+//         current_step = current_step,
+//         user_prompt = user_prompt,
+//         recent_discussion = recent_discussion
+//     )
+// }
 
-pub fn rethink_prompt_with_context(
-    all_steps: &str, 
-    steps_executed: &str, 
-    current_step: &str, 
-    recent_discussion: &str
-) -> String {
-    format!(
-        r#"
-        all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
-        current_step: {current_step}
-        recent_discussion: {recent_discussion}
-        Please suggest changes to the current step based on the recent discussion.
-        "#,
-        all_steps = all_steps,
-        steps_executed = steps_executed,
-        current_step = current_step,
-        recent_discussion = recent_discussion
-    )
-}
+// pub fn rethink_prompt_with_context(
+//     all_steps: &str, 
+//     steps_executed: &str, 
+//     current_step: &str, 
+//     recent_discussion: &str
+// ) -> String {
+//     format!(
+//         r#"
+//         all_steps: {all_steps}
+//         steps_executed_so_far: {steps_executed}
+//         current_step: {current_step}
+//         recent_discussion: {recent_discussion}
+//         Please suggest changes to the current step based on the recent discussion.
+//         "#,
+//         all_steps = all_steps,
+//         steps_executed = steps_executed,
+//         current_step = current_step,
+//         recent_discussion = recent_discussion
+//     )
+// }
 
 
 // pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<StepData, Error> {

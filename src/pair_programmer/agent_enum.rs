@@ -31,7 +31,7 @@ impl AgentEnum {
             "planner" => Ok(AgentEnum::Planner(Box::new(PlannerAgent::new(user_prompt_with_context)))),
             "rethinker" => Ok(AgentEnum::Rethinker(Box::new(RethinkerAgent::new(user_prompt_with_context)))),
             "modifycode" => Ok(AgentEnum::ModifyCodeAgent(Box::new(ModifyCodeAgent::new(user_prompt_with_context)))),
-            "modifystep" => Ok(AgentEnum::ModifyStepAgent(Box::new(ModifyCodeAgent::new(user_prompt_with_context)))),
+            "modifystep" => Ok(AgentEnum::ModifyStepAgent(Box::new(ModifyStepAgent::new(user_prompt_with_context)))),
                
             _ => Err(actix_web::error::ErrorInternalServerError(format!("Unknown agent type: {}", agent_type)).into()),
         }

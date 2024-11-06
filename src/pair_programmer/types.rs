@@ -3,13 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 
-
-#[derive(Deserialize, Debug)]
-pub struct StepsWrapper {
-    pub steps: Vec<PairProgrammerStepRaw>,
-}
-
-
 // #[derive(Debug, Serialize, Deserialize)]
 // pub struct StepDetails {
 //     pub filename: Option<String>,

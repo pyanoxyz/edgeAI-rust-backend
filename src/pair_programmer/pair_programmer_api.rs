@@ -11,11 +11,9 @@ use crate::similarity_index::index::search_index;
 use crate::pair_programmer::agent::Agent;
 use crate::database::db_config::DB_INSTANCE;
 use crate::pair_programmer::agent_enum::AgentEnum;
-use crate::summarization::summarize::summarize_text;
-use crate::prompt_compression::compress::get_attention_scores;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use actix_web::{post, web, get, HttpRequest, HttpResponse, Error};
-use crate::pair_programmer::pair_programmer_utils::{rethink_prompt_with_context, parse_steps, parse_step_number, prompt_with_context, prompt_with_context_for_chat };
+use crate::pair_programmer::pair_programmer_utils::{parse_steps, parse_step_number, prompt_with_context};
 use futures::StreamExt; // Ensure StreamExt is imported
 use crate::session_manager::check_session;
 use reqwest::Client;
@@ -73,8 +71,8 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 
 #[get("/pair-programmer/test_json_parsing")]
 pub async fn test_json_parsing(
-    client: web::Data<Client>,
-    _req: HttpRequest,
+    _client: web::Data<Client>,
+
 ) -> Result<HttpResponse, Error> {
     let input = r#"
    ```yaml

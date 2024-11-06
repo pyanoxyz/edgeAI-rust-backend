@@ -210,56 +210,56 @@ impl DBConfig{
     }
     
 
-    pub fn update_step_chat(&self, pair_programmer_id: &str, step_number: &str, prompt: &str, response: &str) ->Result<(), rusqlite::Error>  {
+    // pub fn update_step_chat(&self, pair_programmer_id: &str, step_number: &str, prompt: &str, response: &str) ->Result<(), rusqlite::Error>  {
             
-        // Lock the mutex to access the connection
-        let connection = self.pair_programmer_connection.lock().unwrap();
-        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    //     // Lock the mutex to access the connection
+    //     let connection = self.pair_programmer_connection.lock().unwrap();
+    //     let step_id = format!("{}_{}", pair_programmer_id, step_number);
 
-        // Fetch the current chat from the step
-        let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?1")?;
-        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+    //     // Fetch the current chat from the step
+    //     let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?1")?;
+    //     let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
 
-        let mut chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+    //     let mut chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
 
-        // Append the new chat message
-        chat_history.push(StepChat{prompt: prompt.to_string(), response: response.to_string()});
+    //     // Append the new chat message
+    //     chat_history.push(StepChat{prompt: prompt.to_string(), response: response.to_string()});
 
-        // Serialize the updated chat array
-        let updated_chat_json = serde_json::to_string(&chat_history).unwrap();
+    //     // Serialize the updated chat array
+    //     let updated_chat_json = serde_json::to_string(&chat_history).unwrap();
 
-        // Update the step with the new response and chat history
-        let sql = "UPDATE pp_steps SET chat = ?1 WHERE id = ?2";
-        connection.execute(sql, params![updated_chat_json, step_id])?;
+    //     // Update the step with the new response and chat history
+    //     let sql = "UPDATE pp_steps SET chat = ?1 WHERE id = ?2";
+    //     connection.execute(sql, params![updated_chat_json, step_id])?;
 
-        Ok(())
+    //     Ok(())
 
-    }
+    // }
 
-    pub fn step_chat_string(&self, pair_programmer_id: &str, step_number: &str) -> Result<String, Box<dyn std::error::Error>> {
-        // Lock the mutex to access the connection
-        let connection = self.pair_programmer_connection.lock().unwrap();
-        let step_id = format!("{}_{}", pair_programmer_id, step_number);
+    // pub fn step_chat_string(&self, pair_programmer_id: &str, step_number: &str) -> Result<String, Box<dyn std::error::Error>> {
+    //     // Lock the mutex to access the connection
+    //     let connection = self.pair_programmer_connection.lock().unwrap();
+    //     let step_id = format!("{}_{}", pair_programmer_id, step_number);
     
-        // Fetch the current chat from the step
-        let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?1")?;
-        let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
+    //     // Fetch the current chat from the step
+    //     let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?1")?;
+    //     let chat_json: String = stmt.query_row(params![step_id], |row| row.get(0))?;
     
-        // Deserialize the chat history from the JSON string
-        let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
+    //     // Deserialize the chat history from the JSON string
+    //     let chat_history: Vec<StepChat> = serde_json::from_str(&chat_json).unwrap_or_else(|_| Vec::new());
     
-        // Convert the StepChat into a formatted string with prompts and responses
-        let formatted_string = chat_history
-            .into_iter()
-            .map(|chat| {
-                format!("Prompt: {}\nResponse: {}\n", chat.prompt, chat.response)
-            })
-            .collect::<Vec<String>>()
-            .join("\n"); // Join the formatted strings with newlines
+    //     // Convert the StepChat into a formatted string with prompts and responses
+    //     let formatted_string = chat_history
+    //         .into_iter()
+    //         .map(|chat| {
+    //             format!("Prompt: {}\nResponse: {}\n", chat.prompt, chat.response)
+    //         })
+    //         .collect::<Vec<String>>()
+    //         .join("\n"); // Join the formatted strings with newlines
     
-        // Return the whole formatted string
-        Ok(formatted_string)
-    }
+    //     // Return the whole formatted string
+    //     Ok(formatted_string)
+    // }
 
     pub fn update_step_heading(
         &self,
@@ -274,9 +274,9 @@ impl DBConfig{
         let step_id = format!("{}_{}", pair_programmer_id, step_number);
     
         // Fetch the existing chat history for the step
-        let mut stmt = connection.prepare("SELECT heading, chat FROM pp_steps WHERE id = ?")?;
-        let (existing_heading, chat_json): (String, String) = stmt.query_row([step_id.clone()], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+        let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?")?;
+        let chat_json: String = stmt.query_row([step_id.clone()], |row| {
+            Ok(row.get(0)?)
         }).map_err(|_| "Failed to retrieve heading and chat for the given step_id")?;
         
         // Deserialize the chat history into a Vec<StepChat>
@@ -325,9 +325,9 @@ impl DBConfig{
         let step_id = format!("{}_{}", pair_programmer_id, step_number);
     
         // Fetch the existing chat history for the step
-        let mut stmt = connection.prepare("SELECT response, chat FROM pp_steps WHERE id = ?")?;
-        let (existing_heading, chat_json): (String, String) = stmt.query_row([step_id.clone()], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+        let mut stmt = connection.prepare("SELECT chat FROM pp_steps WHERE id = ?")?;
+        let chat_json: String = stmt.query_row([step_id.clone()], |row| {
+            Ok(row.get(0)?)
         }).map_err(|_| "Failed to retrieve heading and chat for the given step_id")?;
         
         // Deserialize the chat history into a Vec<StepChat>
