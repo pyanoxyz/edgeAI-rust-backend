@@ -6,7 +6,7 @@ use actix_web::FromRequest;
 use std::sync::{Arc, Mutex};
 use log::{info, debug, error};
 use serde::{Deserialize, Serialize};
-use crate::rag::code_rag::index_code;
+use crate::context::store_text_context::index_code;
 use crate::similarity_index::index::search_index;
 use crate::pair_programmer::agent::Agent;
 use crate::database::db_config::DB_INSTANCE;

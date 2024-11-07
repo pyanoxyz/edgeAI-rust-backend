@@ -7,15 +7,16 @@ use reqwest::Client;
 use std::io::{self};
 use std::path::Path;
 use git2::Repository;
-use log::{info, error};
+use log::{info, error, warn};
 use crate::parser::parse_code::{ParseCode, Chunk, ChunkWithCompressedData};
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
-use crate::similarity_index::index::add_to_index;
+use crate::similarity_index::index::{add_to_index, remove_from_index};
 use rand::Rng;
 use std::collections::HashSet;
-
+use chrono::{DateTime, Utc};
+use std::time::SystemTime;
 #[derive(Debug)]
 struct InvalidGitURLError(String);
 
@@ -160,6 +161,9 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     let mut all_chunks: Vec<Chunk> = Vec::new();
     let mut chunks_with_compressed_data: Vec<ChunkWithCompressedData> = Vec::new();
 
+    //if this is empty which means the path is being indexed for the first time, 
+    // if not, then the path have been indexed earlier
+    let if_already_index = DB_INSTANCE.fetch_path_session(user_id, session_id, path);
     //Storing parent files in the database, before storing individual chunks for parent in 
     //another table
     // DB_INSTANCE.store_parent_context(user_id, session_id, path);
@@ -168,22 +172,49 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     let mut filetype = "";
     let mut category = "";
     if is_local_directory(path) {
-        filetype = "local";
-        category = "files";
-        traverse_directory(path, &mut file_paths)?;
-        for file_path in &file_paths {
-            let chunks = parse_code.process_local_file(file_path);
-            all_chunks.extend(chunks.into_iter().flatten());
+        warn!("Path has already been indexed {}", path);
+        filetype = "local_directory";
+        category = "directories";
+        match if_already_index {
+            Some(value) => {
+                if let Some(timestamp) = value.get("timestamp") {
 
+                    //all the files that has been changed since the last time the repo has been indexed
+                    let modified_files = get_modified_files_since(path, timestamp.as_str().unwrap())?;
+                    warn!("files that are modified since last indexed {:?} {}", modified_files, path);
+                 
+                    delete_index_only_files(user_id, session_id, modified_files.clone());
+                    for file_path in &modified_files {
+                        let chunks = parse_code.process_local_file(file_path);
+                        all_chunks.extend(chunks.into_iter().flatten());
+            
+                    }  
+                    // You can now use `timestamp` for further processing here
+                } else {
+                    println!("Timestamp not found in the JSON value");
+                }
+            },
+            None => {
+                info!("Path is being indexed for the first time {}", path);
+
+                //index all the files if this is the first time that the path is being indexed.
+                traverse_directory(path, &mut file_paths)?;
+                for file_path in &file_paths {
+                    let chunks = parse_code.process_local_file(file_path);
+                    all_chunks.extend(chunks.into_iter().flatten());
+        
+                }        
+            }
         }
+
     } 
     // Check if it's a local file
     else if Path::new(path).is_file() {
-        filetype = "local_directory";
-        category = "directories";
+        filetype = "local";
+        category = "files";
         // Add the file path directly to the list
         file_paths.push(path.to_string());
-        println!("The path is a local file.");
+        info!("The path is a local file.");
         let chunks = parse_code.process_local_file(path);
         all_chunks.extend(chunks.into_iter().flatten());
     }
@@ -197,7 +228,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         let repo_dir_path = download_github_repo(path, &temp_dir).await?;
         info!("The repo is downloaded at {}", repo_dir_path);
         traverse_directory(&repo_dir_path, &mut file_paths)?;
-        println!("The path is a remote repository.");
+        info!("The path is a remote repository.");
         for file_path in &file_paths {
             let chunks = parse_code.process_local_file(file_path);
             all_chunks.extend(chunks.into_iter().flatten());
@@ -215,7 +246,6 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
             // Extend `all_chunks` with the actual chunks
             all_chunks.extend(chunks.into_iter());
         }
-
     } 
     // If none of the conditions are met
     else {
@@ -296,4 +326,82 @@ async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
        }
     };
     Some(tokens)
+}
+
+fn get_modified_files_since(dir: &str, timestamp_str: &str) -> io::Result<Vec<String>> {
+    let mut modified_files = Vec::new();
+
+    // Parse the RFC3339 timestamp string to a DateTime<Utc> and then to SystemTime
+    let timestamp: SystemTime = DateTime::parse_from_rfc3339(timestamp_str)
+        .expect("Failed to parse timestamp")
+        .with_timezone(&Utc)
+        .into();
+
+    // Convert the string to a Path
+    let path = Path::new(dir);
+
+    // Traverse the directory
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let file_path = entry.path();
+
+        // Check if it's a file (not a directory)
+        if file_path.is_file() {
+            // Get the file metadata
+            let metadata = fs::metadata(&file_path)?;
+
+            // Get the last modified time
+            if let Ok(modified) = metadata.modified() {
+                // Compare with the parsed timestamp
+                if modified > timestamp {
+                    modified_files.push(file_path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    Ok(modified_files)
+}
+
+
+pub fn delete_index(user_id: &str, session_id: &str, files: Vec<String>) {
+    for file_path in files {
+        match DB_INSTANCE.delete_parent_context(&file_path) {
+            Ok(_) => {
+                info!("Successfully deleted parent context for file: {:?}", file_path);
+            }
+            Err(e) => {
+                error!("Error deleting {}", e.to_string());            
+            }
+        }
+
+        let vec_row_ids = match DB_INSTANCE.delete_children_context_by_parent_path(user_id, session_id, &file_path) {
+            Ok(ids) => {
+                info!("Successfully deleted chunks for file: {}", file_path);
+                ids
+            }
+            Err(e) => {
+                error!("Error deleting {}", e.to_string());
+                Vec::new()
+            }
+        };
+        info!("vec_row_ids that awere deleted from sqlite {:?}", vec_row_ids);
+        remove_from_index(&session_id, vec_row_ids);
+    }
+}
+
+pub fn delete_index_only_files(user_id: &str, session_id: &str, files: Vec<String>) {
+    for file_path in files {
+        let vec_row_ids = match DB_INSTANCE.delete_children_context_by_file_path(user_id, session_id, &file_path) {
+            Ok(ids) => {
+                info!("Successfully deleted chunks for file: {}", file_path);
+                ids
+            }
+            Err(e) => {
+                error!("Error deleting {}", e.to_string());
+                Vec::new()
+            }
+        };
+        info!("vec_row_ids that awere deleted from sqlite {:?}", vec_row_ids);
+        remove_from_index(&session_id, vec_row_ids);
+    }
 }
