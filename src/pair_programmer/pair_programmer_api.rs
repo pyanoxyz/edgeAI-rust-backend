@@ -190,7 +190,6 @@ pub async fn pair_programmer_generate_steps(
                 }
             }
         }
-
     }
 
     let embeddings_result = generate_text_embedding(&data.task).await;
