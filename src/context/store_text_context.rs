@@ -188,7 +188,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
                         let chunks = parse_code.process_local_file(file_path);
                         all_chunks.extend(chunks.into_iter().flatten());
             
-                    }  
+                    }
                     // You can now use `timestamp` for further processing here
                 } else {
                     println!("Timestamp not found in the JSON value");
@@ -214,7 +214,7 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         category = "files";
         // Add the file path directly to the list
         file_paths.push(path.to_string());
-        info!("The path is a local file.");
+        info!("The path = {} is a local file.", path);
         let chunks = parse_code.process_local_file(path);
         all_chunks.extend(chunks.into_iter().flatten());
     }
@@ -300,6 +300,8 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
     }
 
     add_to_index(session_id, chunks_with_compressed_data);
+    info!("Updating the session context with path = {} with the latest timestamp", path);
+    DB_INSTANCE.update_session_context_timestamp(user_id, session_id, path);
     Ok(all_chunks)
 }
 

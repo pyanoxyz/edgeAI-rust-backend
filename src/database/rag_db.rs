@@ -282,6 +282,22 @@ impl DBConfig{
     }
 
 
+    pub fn update_session_context_timestamp(&self, user_id: &str, session_id: &str, parent_path: &str) -> Result<(), rusqlite::Error> {
+        // Lock the mutex to access the connection
+        let connection = self.connection.lock().unwrap();
+        let timestamp = Utc::now().to_rfc3339();
+
+        // Prepare the SQL query to update the timestamp for the specified entry
+        let result = connection.execute(
+            "UPDATE context_parent 
+             SET timestamp = ? 
+             WHERE user_id = ? AND session_id = ? AND parent_path = ?",
+            params![timestamp.as_str(), user_id, session_id, parent_path],
+        );
+
+        // Return the number of rows affected or an error
+        Ok(())
+    }
 
     pub fn get_row_ids(&self, row_ids: Vec<u64>) ->  Result<Vec<(String, String, String, String)>, Box<dyn Error>> {
         // Collect context data for each nearest embedding
