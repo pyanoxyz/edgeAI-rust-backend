@@ -7,7 +7,8 @@ use std::collections::HashMap;
 
 
 fn parse_heading(input_text: &str) -> Option<String> {
-    let pattern = r"\bheading:\s*(.*?)(?:\s*\n|\s*\baction\b)";
+    // let pattern = r"\bheading:\s*(.*?)(?:\s*\n|\s*\baction\b)";
+    let pattern = r#"heading:\s*["']?[\\/]*(.*?)["']?(?:\s*\n|\s*\baction\b)"#;
     let re = Regex::new(pattern).unwrap();
     if let Some(caps) = re.captures(input_text) {
         return Some(caps.get(1).unwrap().as_str().trim().to_string());
@@ -15,13 +16,44 @@ fn parse_heading(input_text: &str) -> Option<String> {
     None
 }
 
-fn parse_action(input_text: &str) -> Option<String> {
-    let pattern = r"\baction:\s*(.*?)(?:\s*\n|\s*\bdetails\b)";
+fn extract_action_block(input_text: &str) -> Option<&str> {
+    let pattern = r"action:([\s\S]*?)details:";
     let re = Regex::new(pattern).unwrap();
     if let Some(caps) = re.captures(input_text) {
-        return Some(caps.get(1).unwrap().as_str().trim().to_string());
+        return Some(caps.get(0).unwrap().as_str());
     }
     None
+}
+fn parse_action_from_block(action_block: &str) -> Option<String> {
+    // Split the block into lines
+    let lines: Vec<&str> = action_block.lines().collect();
+
+    // Find the line that starts with 'action:'
+    for line in lines {
+        if line.trim_start().starts_with("action:") {
+            // Remove 'action:' from the line
+            let action_line = line.trim_start().trim_start_matches("action:");
+
+            // Remove any comments from the line
+            let action_value = action_line.split('#').next().unwrap().trim();
+
+            // Remove any surrounding quotes
+            let action_value = action_value.trim_matches(|c| c == '"' || c == '\'');
+
+            return Some(action_value.to_string());
+        }
+    }
+    None
+}
+
+
+
+fn parse_action(input_text: &str) -> Option<String> {
+    if let Some(action_block) = extract_action_block(input_text) {
+        parse_action_from_block(action_block)
+    } else {
+        None
+    }
 }
 
 fn parse_details(input_text: &str) -> Option<String> {

@@ -76,62 +76,64 @@ pub async fn test_json_parsing(
 ) -> Result<HttpResponse, Error> {
     let input = r#"
    ```yaml
-        steps:
-        - step_number: "1"
-            heading: "[Create the Multi-Signature Wallet Smart Contract]"
-            action: create_file
-            details:
-            filename: "MultiSignatureWallet.sol"
-        - step_number: "2"
-            heading: "[Define contract variables and functions within 'MultiSignatureWallet.sol']"
-            action: edit_file
-            details:
-            filename: "MultiSignatureWallet.sol"
-        - step_number: "3"
-            heading: "[Install Solidity compiler if not already installed]"
-            action: install_dependency
-            details:
-            package_name: solc
-        - step_number: "4"
-            heading: "[Compile the Multi-Signature Wallet Smart Contract using 'solc']"
-            action: system_command
-            details:
-            command: "solc --bin MultiSignatureWallet.sol"
-        - step_number: "5"
-            heading: "[Create a deployment script for deploying the contract on Ethereum]"
-            action: create_file
-            details:
-            filename: "deploy.js"
-        - step_number: "6"
-            heading: "[Edit 'deploy.js' to include necessary web3 and truffle dependencies]"
-            action: edit_file
-            details:
-            filename: "deploy.js"
-        - step_number: "7"
-            heading: "[Install Truffle if not already installed]"
-            action: install_dependency
-            details:
-            package_name: truffle
-        - step_number: "8"
-            heading: "[Deploy the Multi-Signature Wallet Smart Contract using 'truffle']"
-            action: system_command
-            details:
-            command: "truffle migrate --network development"
-        - step_number: "9"
-            heading: "[Create a script to handle transaction approvals and execution]"
-            action: create_file
-            details:
-            filename: "approveAndExecute.js"
-        - step_number: "10"
-            heading: "[Edit 'approveAndExecute.js' with the logic for approving transactions by signers]"
-            action: edit_file
-            details:
-            filename: "approveAndExecute.js"
-        - step_number: "11"
-            heading: "[Test transaction approval and execution functionality using Truffle tests or similar framework]"
-            action: run_tests
-        ```
-    "#;
+```yaml
+steps:
+  - step_number: "1"
+    heading: "Create a new directory for project files if it doesn't exist."
+    action: "create_directory"
+    details:
+      directory: "./csv_parser_project"
+  - step_number: "2"
+    heading: "Navigate into the newly created project directory."
+    action: "system_command"
+    details:
+      command: "cd ./csv_parser_project"
+  - step_number: "3"
+    heading: "Create a new Python virtual environment for this project if it doesn't exist."
+    action: "create_directory" # Assuming we create venv as a subdirectory
+    details:
+      directory: "./venv"
+  - step_number: "4"
+    heading: "Activate the newly created Python virtual environment."
+    action: "system_command"
+    details:
+      command: "source ./venv/bin/activate" # For Unix-based systems
+  - step_step_number: "5"
+    heading: "Install required packages (pandas, sqlalchemy) into the activated virtual environment using pip."
+    action: "install_dependency"
+    details:
+      package_name: "pip install pandas sqlalchemy"
+  - step_number: "6"
+    heading: "Create a new Python script file named 'parse_csv.py' if it doesn't already exist in the project directory."
+    action: "create_file"
+    details:
+      filename: "./csv_parser_project/parse_csv.py"
+  - step_number: "7"
+    heading: "Edit the newly created Python script to include necessary imports and CSV parsing logic using pandas library. Also, set up database connection with SQLAlchemy."
+    action: "edit_file"
+    details:
+      filename: "./csv_parser_project/parse_csv.py"
+  - step_step_number: "8"
+    heading: "Write a function in the 'parse_csv.py' script to handle large CSV file parsing efficiently using pandas chunking feature. Ensure it handles memory usage effectively."
+    action: "edit_file" # Continue editing parse_csv.py
+    details:
+      filename: "./csv_parser_project/parse_csv.py"
+  - step_number: "9"
+    heading: "Write a function in the 'parse_csv.py' script to store parsed data into an SQL database using SQLAlchemy ORM. Ensure it handles different data types and relationships."
+    action: "edit_file" # Continue editing parse_csv.py
+    details:
+      filename: "./csv_parser_project/parse_csv.py"
+  - step_number: "10"
+    heading: "Test the 'parse_csv.py' script by running a test case with a sample CSV file. Ensure it correctly parses and stores data."
+    action: "run_tests" # Assuming there's already a testing framework set up
+    details:
+      command: "./csv_parser_project/venv/bin/python -m unittest discover ./test"
+  - step_number: "11"
+    heading: "Document the steps taken to create, activate virtual environment and install dependencies."
+    action: "edit_file" # Create or edit a README.md file
+    details:
+      filename: "./csv_parser_project/README.md"    
+      "#;
 
     // Call the custom parser to parse steps
     let steps = parse_steps(input).unwrap_or_else(|err| {
@@ -147,6 +149,8 @@ pub async fn test_json_parsing(
     Ok(HttpResponse::Ok().json(steps))
 
 }
+
+
 #[post("/pair-programmer/generate-steps")]
 pub async fn pair_programmer_generate_steps(
     data: web::Json<GenerateStepsRequest>,
@@ -180,7 +184,7 @@ pub async fn pair_programmer_generate_steps(
     if let Some(files) = &data.files {
         for file_path in files {
 
-            match index_code(&user_id, &pair_programmer_id, file_path).await {
+            match index_code(&user_id, &session_id, file_path).await {
                 Ok(_) => {
                 }
                 Err(e) => {
@@ -207,7 +211,7 @@ pub async fn pair_programmer_generate_steps(
         }
     };
 
-    let chunk_ids = search_index(&pair_programmer_id, query_embeddings.clone(), 20);
+    let chunk_ids = search_index(&session_id, query_embeddings.clone(), 20);
 
     //  let file_path, chunk_type, content, pair_programmer_id;
     let entries = DB_INSTANCE.get_row_ids(chunk_ids).unwrap();
