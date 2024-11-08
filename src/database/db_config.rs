@@ -207,13 +207,14 @@ impl DBConfig {
         connection
             .execute(
                 "
-            CREATE TABLE IF NOT EXISTS pair_programmer_steps (
+            CREATE TABLE IF NOT EXISTS pp_steps (
                 id TEXT PRIMARY KEY,  -- UUID as primary key,
                 pair_programmer_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
                 heading TEXT NOT NULL,
-                function_call TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT,
                 executed INTEGER NOT NULL,
                 response TEXT,
                 timestamp TEXT,

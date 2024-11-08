@@ -4,7 +4,7 @@ use crate::authentication::authorization::is_request_allowed;
 use log::{ info, warn };
 use crate::session_manager::check_session;
 use serde_json::json;
-use crate::rag::code_rag::index_code;
+use crate::context::store_text_context::index_code;
 use crate::parser::parse_code::Chunk;
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
@@ -76,10 +76,10 @@ pub async fn rag_request(
     let mut all_indexed_chunks: Vec<Chunk> = Vec::new();
     // Iterate over the files and call `index_code` for each
     for file_path in &data.files {
-        if indexed_paths.contains(file_path) {
-            warn!("Skipping already indexed file: {:?}", file_path);
-            continue;
-        }
+        // if indexed_paths.contains(file_path) {
+        //     warn!("Skipping already indexed file: {:?}", file_path);
+        //     continue;
+        // }
 
         match index_code(&user_id, &session_id, file_path).await {
             Ok(chunks) => {

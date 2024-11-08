@@ -1,114 +1,85 @@
 
-use regex::Regex;
-use serde_json::Value; // For handling JSON data
-use crate::pair_programmer::pair_programmer_types::Step;
-use std::cmp::max;
 use actix_web:: Error;
 use crate::database::db_config::DB_INSTANCE;
-/// Parses a string input and extracts steps with their associated metadata, including step number, heading, tool, and action.
-///
-/// This function uses regular expressions to parse each line of the input string, matching the following patterns:
-/// 1. **Step**: Captures the step number and heading in the format `Step N: Description`.
-/// 2. **Tool**: Captures the tool name, allowing for spaces and hyphens, in the format `Tool: tool-name`.
-/// 3. **Action**: Captures an action that contains a function and parameters in the format 
-///    `Action: <function=function_name>{{parameters}}`
-///
-/// Each step is represented by a `Step` struct that holds the following:
-/// - `step_number`: The step's number.
-/// - `heading`: A string representing the heading or description of the step.
-/// - `tool`: The tool name associated with the step, if provided.
-/// - `action`: The action to be executed, containing a function and its parameters, if provided.
-///
-/// # Arguments
-///
-/// * `input` - A string slice (`&str`) containing the step definitions. The steps should be formatted in a predefined structure with step number, tool, and action.
-///
-/// # Returns
-///
-/// * `Vec<Step>` - A vector of `Step` structs, each representing a parsed step with its metadata.
-///
-/// # Example
-///
-/// ```rust
-/// let input = r#"
-/// Step 1: Initialize the project
-/// Tool: build-tool
-/// Action: <function=initialize>{{"param": "value"}}
-///
-/// Step 2: Set up environment
-/// Tool: env-tool
-/// Action: <function=setup>{{"config": "env"}}
-/// "#;
-///
-/// let steps = parse_steps(input);
-/// for step in steps {
-///     println!("Step {}: {}", step.step_number, step.heading);
-///     println!("Tool: {}", step.tool);
-///     println!("Action: {}", step.action);
-/// }
-/// ```
-///
-/// This example demonstrates how the function processes the input and extracts the steps, tools, and actions. 
-/// The output will be a list of `Step` structs, with each step containing its parsed attributes.
-///
-/// # Note
-/// - If a step does not contain a tool or an action, the corresponding fields will remain empty.
-/// - The last step is automatically added when the end of the input is reached.
+use super::types::PairProgrammerStepRaw;
+use regex::Regex;
+use std::collections::HashMap;
 
-pub fn parse_steps(input: &str) -> Vec<Step> {
-    // Regex for matching the step number and description
-    let re_step = Regex::new(r"(?i)\s*Step\s+(\d+)\s*:\s*(.+)").unwrap();
-    
-    // Regex for matching the tool, allowing spaces and tool names with hyphens
-    let re_tool = Regex::new(r"(?i)\s*Tool\s*:\s*([\w\-]+)").unwrap();
-    
-    // Regex for matching the action, including function name and parameters
-    let re_action = Regex::new(r#"(?i)\s*Action\s*:\s*<function=([^>]+)>\s*\{\{(.+?)\}\}\s*</function>"#).unwrap();
-    
-    let mut steps = Vec::new();
-    let mut current_step_number = 0;
-    let mut current_heading = String::new();
-    let mut current_tool = String::new();
-    let mut current_action = String::new();
 
-    for line in input.lines() {
-        let trimmed_line = line.trim();
-        
-        if let Some(caps) = re_step.captures(trimmed_line) {
-            // Push the previous step if exists
-            if current_step_number > 0 {
-                steps.push(Step {
-                    step_number: current_step_number,
-                    heading: current_heading.clone(),
-                    tool: current_tool.clone(),
-                    action: current_action.clone(),
-                });
-            }
+fn parse_heading(input_text: &str) -> Option<String> {
+    let pattern = r"\bheading:\s*(.*?)(?:\s*\n|\s*\baction\b)";
+    let re = Regex::new(pattern).unwrap();
+    if let Some(caps) = re.captures(input_text) {
+        return Some(caps.get(1).unwrap().as_str().trim().to_string());
+    }
+    None
+}
 
-            // Start a new step
-            current_step_number = caps[1].parse().unwrap_or(0);
-            current_heading = caps[2].to_string();
-            current_tool.clear();
-            current_action.clear();
-        } else if let Some(caps) = re_tool.captures(trimmed_line) {
-            current_tool = caps[1].to_string();
-        } else if let Some(caps) = re_action.captures(trimmed_line) {
-            current_action = format!("<function={}>{{{{{}}}}}", &caps[1], &caps[2]);
+fn parse_action(input_text: &str) -> Option<String> {
+    let pattern = r"\baction:\s*(.*?)(?:\s*\n|\s*\bdetails\b)";
+    let re = Regex::new(pattern).unwrap();
+    if let Some(caps) = re.captures(input_text) {
+        return Some(caps.get(1).unwrap().as_str().trim().to_string());
+    }
+    None
+}
+
+fn parse_details(input_text: &str) -> Option<String> {
+    let pattern = r"\bdetails:\s*(.*)";
+    let re = Regex::new(pattern).unwrap();
+    if let Some(caps) = re.captures(input_text) {
+        return Some(caps.get(1).unwrap().as_str().trim().to_string());
+    }
+    None
+}
+
+fn parse_key_values(input_text: Option<&str>) -> Option<std::collections::HashMap<String, String>> {
+    if input_text.is_none() {
+        return None;
+    }
+    let input_text = input_text.unwrap();
+    let mut key_value_pairs = std::collections::HashMap::new();
+    for line in input_text.lines() {
+        if let Some((key, value)) = line.split_once(":") {
+            key_value_pairs.insert(key.trim().to_string(), value.trim().trim_matches('"').to_string());
         }
     }
+    Some(key_value_pairs)
+}
+pub fn parse_steps(input: &str) -> Result<Vec<PairProgrammerStepRaw>, Error> {
+    let split_input = input.split("step_number").skip(1); // Split based on "step_number" and skip the first empty segment
+    let mut steps = Vec::new();
 
-    // Add the last step if it exists
-    if current_step_number > 0 {
-        steps.push(Step {
-            step_number: current_step_number,
-            heading: current_heading.clone(),
-            tool: current_tool.clone(),
-            action: current_action.clone(),
+    for (index, step_text) in split_input.enumerate() {
+        let step_number = (index + 1).to_string();
+
+        let heading = match parse_heading(step_text) {
+            Some(h) => h,
+            None => String::from("Missing heading"),
+        };
+
+        let action = match parse_action(step_text) {
+            Some(a) => a,
+            None => String::from("Missing action"),
+        };
+
+        let details_str = parse_details(step_text);
+        let details = match parse_key_values(details_str.as_deref()) {
+            Some(d) => d,
+            None => HashMap::new(),
+        };
+
+        steps.push(PairProgrammerStepRaw {
+            step_number,
+            heading,
+            action,
+            details,
         });
     }
 
-    steps
+    Ok(steps)
 }
+
 
 // Helper function to parse the step_number from a string to usize
 pub fn parse_step_number(step_number_str: &str) -> Result<usize, Error> {
@@ -117,290 +88,151 @@ pub fn parse_step_number(step_number_str: &str) -> Result<usize, Error> {
         .map_err(|_| actix_web::error::ErrorBadRequest("Invalid step number: unable to convert to a valid number"))
 }
 
-/// Validates whether a specified step can be executed in a sequence of steps.
-///
-/// This function performs several checks to ensure that the provided step can be executed:
-/// 1. Ensures the step number is within the valid range of steps.
-/// 2. Ensures that all previous steps have been executed before the specified step can be executed.
-/// 3. Ensures the specified step has not already been executed.
-///
-/// # Arguments
-///
-/// * `step_number` - The 1-based index of the step to validate.
-/// * `steps` - A vector of `serde_json::Value` representing the steps. Each step must be a JSON object
-///             that contains an `"executed"` field, which indicates whether the step has already been executed.
-///
-/// # Returns
-///
-/// * `Ok(())` - If the specified step can be executed.
-/// * `Err(Error)` - If validation fails due to one of the following reasons:
-///     - The step number is out of bounds.
-///     - A previous step has not been executed.
-///     - The current step has already been executed.
-///     - Invalid step format (the step data is not a JSON object).
-///
-/// # Errors
-///
-/// * `ErrorBadRequest` - Returned if:
-///     - The step number is out of bounds.
-///     - A previous step has not been executed.
-///     - The current step has already been executed.
-/// * `ErrorInternalServerError` - Returned if the step data is in an invalid format.
-///
-/// # Example
-///
-/// ```
-/// let steps = vec![
-///     json!({"executed": true}),
-///     json!({"executed": false}),
-///     json!({"executed": false}),
-/// ];
-///
-/// let step_number = 2;
-/// match validate_steps(step_number, &steps) {
-///     Ok(()) => println!("Step can be executed."),
-///     Err(e) => println!("Error: {}", e),
-/// }
-/// ```
-///
-/// In this example, the function will allow the second step to be executed only if the first step has already been executed
-/// and the second step itself has not been executed yet.
 
-pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Result<(), Error> {
 
-    if step_number > steps.len() {
-        return Err(actix_web::error::ErrorBadRequest(
-            format!("Step number {} is out of bounds, there are only {} steps", step_number, steps.len()),
-        ));
-    }
+// pub fn validate_steps(step_number: usize, steps: &Vec<serde_json::Value>) -> Result<(), Error> {
 
-    for (index, step) in steps.into_iter().enumerate() {
-        let actual_index = index + 1; // Start enumeration from 1
+//     if step_number > steps.len() {
+//         return Err(actix_web::error::ErrorBadRequest(
+//             format!("Step number {} is out of bounds, there are only {} steps", step_number, steps.len()),
+//         ));
+//     }
 
-        // Access step data as an object
-        let step_data = step.as_object().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("Invalid step data format")
-        })?;
+//     for (index, step) in steps.into_iter().enumerate() {
+//         let actual_index = index + 1; // Start enumeration from 1
 
-        // Check if the current step is the one we want to execute
-        if actual_index == step_number {
-            let executed = step_data.get("executed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+//         // Access step data as an object
+//         let step_data = step.as_object().ok_or_else(|| {
+//             actix_web::error::ErrorInternalServerError("Invalid step data format")
+//         })?;
 
-            // If the step is already executed, return an error
-            if executed {
-                return Err(actix_web::error::ErrorBadRequest(
-                    format!("Step {} has already been executed", step_number),
-                ));
-            }
-        }
+//         // Check if the current step is the one we want to execute
+//         if actual_index == step_number {
+//             let executed = step_data.get("executed")
+//                 .and_then(|v| v.as_bool())
+//                 .unwrap_or(false);
 
-        // Ensure that all previous steps are executed
-        if actual_index < step_number {
-            let previous_executed = step_data.get("executed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+//             // If the step is already executed, return an error
+//             if executed {
+//                 return Err(actix_web::error::ErrorBadRequest(
+//                     format!("Step {} has already been executed", step_number),
+//                 ));
+//             }
+//         }
 
-            if !previous_executed {
-                return Err(actix_web::error::ErrorBadRequest(
-                    format!("Previous step {} has not been executed", actual_index),
-                ));
-            }
-        }
-    }
-    Ok(())
-}
+//         // Ensure that all previous steps are executed
+//         // if actual_index < step_number {
+//         //     let previous_executed = step_data.get("executed")
+//         //         .and_then(|v| v.as_bool())
+//         //         .unwrap_or(false);
 
-/// Formats the steps in a structured way, generating three different outputs:
-/// 1. A formatted list of all steps with their headings.
-/// 2. A formatted list of steps that have been executed so far.
-/// 3. A formatted list of the most recent executed steps (up to the last 3 before the current step),
-///    along with their associated responses.
-///
-/// # Arguments
-///
-/// * `steps` - A slice of `serde_json::Value` representing the steps. Each step is expected to contain:
-///   - `"heading"`: A string representing the heading of the step.
-///   - `"executed"`: A boolean indicating whether the step has been executed.
-///   - `"response"`: A string representing the response associated with the step, if available.
-/// * `step_number` - The current step number, used to filter and limit the steps executed with responses.
-///
-/// # Returns
-///
-/// A tuple containing three formatted strings:
-/// * `(String, String, String)`:
-///   - The first string contains all steps with their headings in the format `Step: N. Heading`.
-///   - The second string contains the steps that have been executed so far, filtered by the `"executed"` field.
-///   - The third string contains the last 3 executed steps (limited to steps before the current step number),
-///     including their responses, in the format:
-///     ```
-///     Step: Heading
-///     response: Response
-///     ```
-///
-/// # Example
-///
-/// ```rust
-/// let steps = vec![
-///     json!({"heading": "Initialize project", "executed": true, "response": "Success"}),
-///     json!({"heading": "Set up environment", "executed": false}),
-///     json!({"heading": "Run tests", "executed": true, "response": "All tests passed"}),
-/// ];
-///
-/// let (all_steps, steps_executed_so_far, steps_executed_with_response) = format_steps(&steps, 3);
-///
-/// println!("All Steps:\n{}", all_steps);
-/// println!("Executed Steps So Far:\n{}", steps_executed_so_far);
-/// println!("Executed Steps with Responses:\n{}", steps_executed_with_response);
-/// ```
-///
-/// This example shows how to use the function to get the formatted steps and how the output is structured.
+//         //     if !previous_executed {
+//         //         return Err(actix_web::error::ErrorBadRequest(
+//         //             format!("Previous step {} has not been executed", actual_index),
+//         //         ));
+//         //     }
+//         // }
+//     }
+//     Ok(())
+// }
 
-pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String, String) {
-    // Format all steps
-    let all_steps = steps.iter()
-        .enumerate()
-        .map(|(index, step)| {
-            let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
-            format!("Step: {}. {}", index + 1, heading)
-        })
-        .collect::<Vec<String>>()
-        .join("\n");
 
-    // Format steps executed so far
-    let steps_executed_so_far = steps.iter()
-        .enumerate()
-        .filter(|(_, step)| step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false))
-        .map(|(index, step)| {
-            let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
-            format!("Step: {}. {}", index + 1, heading)
-        })
-        .collect::<Vec<String>>()
-        .join("\n");
+// pub fn format_steps(steps: &[Value], step_number: usize) -> (String, String) {
+//     // Format all steps
+//     let all_steps = steps.iter()
+//         .enumerate()
+//         .map(|(index, step)| {
+//             let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
+//             format!("Step: {}. {}", index + 1, heading)
+//         })
+//         .collect::<Vec<String>>()
+//         .join("\n");
 
-    // Format steps executed with response (limit to last 3 before current step_number)
-    let steps_executed_with_response = steps.iter()
-        .skip(max(0, step_number.saturating_sub(3)))  // Start from max(0, step_number-3)
-        .take(step_number)  // Take up to current step_number
-        .filter(|step| step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false))
-        .map(|step| {
-            let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
-            let response = step.get("response").and_then(|v| v.as_str()).unwrap_or("No Response");
-            format!("Step: {}\n response: {}\n", heading, response)
-        })
-        .collect::<Vec<String>>()
-        .join("\n");
 
-    (all_steps, steps_executed_so_far, steps_executed_with_response)
-}
+//     // Format steps executed with response (output all steps before the current step_number)
+//     let steps_executed_with_response = steps.iter()
+//         .take(step_number)  // Take all steps up to the current step_number
+//         .filter(|step| {
+//             step.get("tool").and_then(|v| v.as_str()) == Some("edit_file") &&
+//             step.get("executed").and_then(|v| v.as_bool()).unwrap_or(false)
+//         })
+//         .map(|step| {
+//             let heading = step.get("heading").and_then(|v| v.as_str()).unwrap_or("No Heading");
+//             let response = step.get("response").and_then(|v| v.as_str()).unwrap_or("No Response");
+//             format!("Step: {}\n response: {}\n", heading, response)
+//         })
+//         .collect::<Vec<String>>()
+//         .join("\n");
+
+
+//     (all_steps, steps_executed_with_response)
+// }
 
 pub fn prompt_with_context(
+    pair_programmer_id: &str,
     all_steps: &str, 
     steps_executed: &str, 
     current_step: &str, 
     additional_context_from_codebase: &str, 
-    recent_discussion: &str
 ) -> String {
+
+    let original_task = DB_INSTANCE.fetch_task_from_pair_programmer(&pair_programmer_id).unwrap();
     format!(
         r#"
+        original_task: {original_task}
         all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
+        executed_steps: {steps_executed}
         current_step: {current_step}
         overall_context: {additional_context_from_codebase}
-        recent_discussion: {recent_discussion}
-        Please implement the current step based on this context. Ensure your response follows the specified output format in the system prompt.
+        Please implement the current step based on this overall_context. Ensure your response follows the specified output format in the system prompt.
         "#,
         all_steps = all_steps,
         steps_executed = steps_executed,
         current_step = current_step,
         additional_context_from_codebase = additional_context_from_codebase,
-        recent_discussion = recent_discussion
     )
 }
 
-pub fn prompt_with_context_for_chat(
-    all_steps: &str, 
-    steps_executed: &str, 
-    current_step: &str, 
-    user_prompt: &str, 
-    recent_discussion: &str
-) -> String {
-    format!(
-        r#"
-        all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
-        current_step: {current_step}
-        recent_discussion: {recent_discussion}
-        Please respond to user query {user_prompt} based on the context.
-        "#,
-        all_steps = all_steps,
-        steps_executed = steps_executed,
-        current_step = current_step,
-        user_prompt = user_prompt,
-        recent_discussion = recent_discussion
-    )
-}
+// pub fn prompt_with_context_for_chat(
+//     all_steps: &str, 
+//     steps_executed: &str, 
+//     current_step: &str, 
+//     user_prompt: &str, 
+//     recent_discussion: &str
+// ) -> String {
+//     format!(
+//         r#"
+//         all_steps: {all_steps}
+//         steps_executed_so_far: {steps_executed}
+//         current_step: {current_step}
+//         recent_discussion: {recent_discussion}
+//         Please respond to user query {user_prompt} based on the context.
+//         "#,
+//         all_steps = all_steps,
+//         steps_executed = steps_executed,
+//         current_step = current_step,
+//         user_prompt = user_prompt,
+//         recent_discussion = recent_discussion
+//     )
+// }
 
-pub fn rethink_prompt_with_context(
-    all_steps: &str, 
-    steps_executed: &str, 
-    current_step: &str, 
-    recent_discussion: &str
-) -> String {
-    format!(
-        r#"
-        all_steps: {all_steps}
-        steps_executed_so_far: {steps_executed}
-        current_step: {current_step}
-        recent_discussion: {recent_discussion}
-        Please suggest changes to the current step based on the recent discussion.
-        "#,
-        all_steps = all_steps,
-        steps_executed = steps_executed,
-        current_step = current_step,
-        recent_discussion = recent_discussion
-    )
-}
-
-
-pub fn data_validation(pair_programmer_id: &str, step_number: &str) -> Result<(usize, String, String, String, String, String, String), actix_web::Error>{
-    let step_number = parse_step_number(step_number).map_err(|err| {
-        actix_web::error::ErrorBadRequest(format!("Invalid step number: {}", err))
-    })?;
-    let true_step_number = step_number -1;
-
-    let steps = DB_INSTANCE.fetch_steps(&pair_programmer_id);
-
-     // Validate steps
-     validate_steps(step_number, &steps).map_err(|err| {
-        actix_web::error::ErrorBadRequest(format!("Step validation failed: {}", err))
-    })?;
-
-    // Fetch the current step based on true_step_number
-    let step = steps.get(true_step_number).ok_or_else(|| {
-        actix_web::error::ErrorBadRequest(format!("Step number out of range: {}", true_step_number))
-    })?;
-
-    let step_chat = DB_INSTANCE.step_chat_string(pair_programmer_id, &step_number.to_string()).map_err(|err| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to retrieve chat: {:?}", err))
-    })?;
-
-      // Retrieve the task heading from the step
-    let task_heading = step.get("heading")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| {
-          actix_web::error::ErrorBadRequest(format!("Invalid step: 'heading' field is missing or not a string for step {}", true_step_number))
-      })?;
-
-    let function_call = step.get("tool")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| {
-          actix_web::error::ErrorBadRequest(format!("Invalid step: 'tool' field is missing or not a string {}", step_number))
-      })
-      .unwrap();
-
-    let (all_steps, steps_executed_so_far, steps_executed_response) = format_steps(&steps, step_number);
-
-    Ok((step_number, task_heading.to_owned(), function_call.to_owned(), step_chat, all_steps, steps_executed_so_far, steps_executed_response))
-}
+// pub fn rethink_prompt_with_context(
+//     all_steps: &str, 
+//     steps_executed: &str, 
+//     current_step: &str, 
+//     recent_discussion: &str
+// ) -> String {
+//     format!(
+//         r#"
+//         all_steps: {all_steps}
+//         steps_executed_so_far: {steps_executed}
+//         current_step: {current_step}
+//         recent_discussion: {recent_discussion}
+//         Please suggest changes to the current step based on the recent discussion.
+//         "#,
+//         all_steps = all_steps,
+//         steps_executed = steps_executed,
+//         current_step = current_step,
+//         recent_discussion = recent_discussion
+//     )
+// }

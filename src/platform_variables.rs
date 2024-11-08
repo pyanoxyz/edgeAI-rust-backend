@@ -10,6 +10,15 @@ const QWEN_PROMPT_TEMPLATE: &str =
     <|im_start|>assistant
     "#;
 
+// const QWEN_PROMPT_TEMPLATE: &str =
+//     r#"
+//     <｜begin▁of▁sentence｜>{system_prompt}
+//     User: {user_prompt}
+//     Assistant: <｜end▁of▁sentence｜>Assistant:
+//     "#;
+
+
+
 pub fn get_default_prompt_template() -> String {
     let sytem_prompt = match DB_INSTANCE.get_system_prompt() {
         Ok(system_prompt) => {

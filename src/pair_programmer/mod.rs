@@ -1,11 +1,12 @@
 pub mod agent;
 pub mod agent_planner;
 pub mod pair_programmer_api;
-pub mod pair_programmer_types;
 pub mod agent_system_code;
 pub mod agent_generate_code;
 pub mod agent_native_llm;
 pub mod agent_rethinker;
 pub mod agent_enum;
 pub mod pair_programmer_utils;
-pub mod agent_chat;
+pub mod agent_modifycode;
+pub mod agent_modifystep;
+pub mod types;
