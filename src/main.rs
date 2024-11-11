@@ -1,13 +1,14 @@
 use actix_cors::Cors;
-use actix_web::{ get, post, web, App, HttpServer, Responder };
+use actix_web::{ get, post, web, App, HttpServer, HttpResponse, Responder };
 use serde::{ Deserialize, Serialize };
+use serde_json::json;
 use env_logger::Env;
 use log::info;
 use dotenv::dotenv;
 use std::sync::{ Arc, Mutex };
 use tokio::sync::Mutex as TokioMutex; // Import tokio's async mutex
 use reqwest::Client;
-
+use std::env;
 mod chats; // Import the chats module
 mod authentication;
 mod utils;
@@ -27,7 +28,7 @@ mod context;
 mod infill;
 mod similarity_index;
 use crate::model_state::state::ModelState;
-use crate::infill::state::InfillModelState ;
+use crate::infill::state::InfillModelState;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -38,6 +39,13 @@ async fn hello() -> impl Responder {
 #[get("/health")]
 async fn echo() -> impl Responder {
     "{\"status\": \"ok\"}"
+}
+
+#[get("/version")]
+async fn version() -> HttpResponse {
+    let version = env!("CARGO_PKG_VERSION");
+
+    HttpResponse::Ok().json(json!({"version": version}))
 }
 
 #[derive(Deserialize)]
@@ -70,6 +78,7 @@ async fn main() -> std::io::Result<()> {
     let model_state = Arc::new(ModelState {
         model_pid: Arc::new(Mutex::new(None)),
         model_process: Arc::new(TokioMutex::new(None)),
+        model_type: Arc::new(Mutex::new(String::new())),
     });
 
     let infill_model_state: Arc<InfillModelState> = Arc::new(InfillModelState {
@@ -112,6 +121,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello) // Register the GET route
             .service(echo) // Register the POST route
             .service(json_handler) // Register the POST route for JSON
+            .service(version)
             .configure(model_state::model_state_api::model_state_routes)
             .configure(infill::infill_model_state_routes)
             .configure(infill::infill_routes) // Add chat_fill routes

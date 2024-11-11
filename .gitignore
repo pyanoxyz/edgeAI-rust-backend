@@ -7,6 +7,7 @@
 # having git ignore such leftovers. You can use `.git/info/exclude` to
 # configure your local ignore list.
 
+.env
 ## File system
 .DS_Store
 desktop.ini
@@ -80,8 +81,7 @@ __pycache__/
 
 ## Node
 node_modules
-package-lock.json
-package.json
+
 
 ## Rustdoc GUI tests
 tests/rustdoc-gui/src/**.lock

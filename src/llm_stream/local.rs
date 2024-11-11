@@ -75,7 +75,7 @@ async fn send_llm_request(
     Box<dyn StdError + Send + Sync + 'static>
 > {
     let default_prompt_template = get_default_prompt_template();
-
+    // info!("Template {}", default_prompt_template);
     // Make the full prompt
     let full_prompt = default_prompt_template
         .replace("{system_prompt}", system_prompt)
@@ -84,7 +84,7 @@ async fn send_llm_request(
     // info!("{} with temperature {}", full_prompt, temperature);
 
     let resp = client
-        .post(format!("{}/completions", llm_server_url))
+        .post(format!("{}/completion", llm_server_url))
         .json(
             &json!({
             "prompt": full_prompt,

@@ -1,9 +1,7 @@
-
-use usearch::{Index, IndexOptions, MetricKind, ScalarKind, new_index};
-use log::{info, error};
+use usearch::{ Index, IndexOptions, MetricKind, ScalarKind, new_index };
+use log::{ info, error };
 use crate::parser::parse_code::ChunkWithCompressedData;
 use std::fs;
-
 
 // let index: Index = new_index(&options).unwrap();
 
@@ -24,7 +22,6 @@ use std::fs;
 // let results = index.search(&first, 10).unwrap();
 // assert_eq!(results.keys.len(), 2);
 
-
 pub fn add_to_index(session_id: &str, chunks_with_data: Vec<ChunkWithCompressedData>) {
     // Load or create the index
     let index = load_or_create_index(session_id);
@@ -33,12 +30,13 @@ pub fn add_to_index(session_id: &str, chunks_with_data: Vec<ChunkWithCompressedD
     for chunk_with_data in chunks_with_data {
         match index.add(chunk_with_data.chunk_id, &chunk_with_data.embeddings) {
             Ok(_) => info!("Added chunk {} to index", chunk_with_data.chunk_id),
-            Err(err) => error!(
-                "Failed to add embeddings of length {} for chunk ID {}: {:?}",
-                chunk_with_data.embeddings.len(),
-                chunk_with_data.chunk_id,
-                err
-            ),
+            Err(err) =>
+                error!(
+                    "Failed to add embeddings of length {} for chunk ID {}: {:?}",
+                    chunk_with_data.embeddings.len(),
+                    chunk_with_data.chunk_id,
+                    err
+                ),
         };
     }
 
@@ -82,13 +80,11 @@ fn load_or_create_index(session_id: &str) -> Index {
         Err(err) => {
             info!("Index load failed for session: {} with error {}", session_id, err);
         }
-    };
-    if let Err(err) = index.reserve(10000000){
+    }
+    if let Err(err) = index.reserve(10000000) {
         error!("Failed to reserve memory for the index: {}", err);
-
     }
     index
-    
 }
 
 fn save_index(index: &Index, session_id: &str) -> Result<(), String> {
@@ -105,14 +101,11 @@ fn save_index(index: &Index, session_id: &str) -> Result<(), String> {
             info!("Index successfully saved for session: {}", session_id);
             Ok(())
         }
-        Err(err) => Err(format!(
-            "Failed to save the index for session {}: {:?}",
-            session_id, err
-        )),
+        Err(err) => Err(format!("Failed to save the index for session {}: {:?}", session_id, err)),
     }
 }
 
-pub fn search_index(session_id: &str, query_embedding: Vec<f32>, items: usize) ->  Vec<u64>{
+pub fn search_index(session_id: &str, query_embedding: Vec<f32>, items: usize) -> Vec<u64> {
     // Load the index
     let index = load_or_create_index(session_id);
     let mut result_vec: Vec<u64> = Vec::new();
@@ -120,22 +113,18 @@ pub fn search_index(session_id: &str, query_embedding: Vec<f32>, items: usize) -
     // Perform the search on the index with the query embedding
     match index.search(&query_embedding, items) {
         Ok(results) => {
-            info!("Found {:?} results for session: {}", results, session_id);
+            // info!("Found {:?} results for session: {}", results, session_id);
             for (i, result) in results.keys.into_iter().enumerate() {
-                info!("Result {}: {:?}", i + 1, result);
+                // info!("Result {}: {:?}", i + 1, result);
                 result_vec.push(result);
             }
-        },
+        }
         Err(err) => {
-            error!(
-                "Search failed for session: {} with error: {:?}",
-                session_id, err
-            );
+            error!("Search failed for session: {} with error: {:?}", session_id, err);
         }
     }
     result_vec
 }
-
 
 pub fn remove_from_index(session_id: &str, chunk_ids: Vec<u64>) {
     // Load or create the index
@@ -145,20 +134,13 @@ pub fn remove_from_index(session_id: &str, chunk_ids: Vec<u64>) {
     for chunk_id in chunk_ids {
         match index.remove(chunk_id) {
             Ok(_) => info!("Removed chunk {} from index", chunk_id),
-            Err(err) => error!(
-                "Failed to remove chunk ID {} from index: {:?}",
-                chunk_id,
-                err
-            ),
+            Err(err) => error!("Failed to remove chunk ID {} from index: {:?}", chunk_id, err),
         };
     }
 
     // Save the index after removing the chunks
     if let Err(err) = save_index(&index, session_id) {
-        error!(
-            "Failed to save the index after removal for session {}: {:?}",
-            session_id, err
-        );
+        error!("Failed to save the index after removal for session {}: {:?}", session_id, err);
     } else {
         info!("Index successfully updated and saved after removal for session: {}", session_id);
     }

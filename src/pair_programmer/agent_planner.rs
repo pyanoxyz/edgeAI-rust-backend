@@ -1,5 +1,3 @@
-
-
 use crate::pair_programmer::agent::Agent;
 use async_trait::async_trait;
 
@@ -19,11 +17,12 @@ impl Agent for PlannerAgent {
     // Implementing the required trait methods for PlannedAgent
     fn get_name(&self) -> String {
         let name: &str = "planner";
-        return name.to_string()    }
-
+        return name.to_string();
+    }
 
     fn get_system_prompt(&self) -> String {
-        let system_prompt = r#"
+        let system_prompt =
+            r#"
         You are a problem-solving expert specializing in breaking down complex programming tasks into ordered, executable steps. 
         Your task is to decompose a complex programming problem into a clear sequence of distinct, actionable steps in strict YAML format, 
         referencing filenames and directory names from the provided context_code.
@@ -74,12 +73,12 @@ impl Agent for PlannerAgent {
             Each step is represented as an object within the "steps" list.
             Each step contains a unique step_number, a clear heading, a specific action (from command_guidance), and relevant details (only using the four specified keys).
             Do not hallucinate actions or scripts.
-            Do not output any code in the steps.
+            Do not output any code in the steps. Always provide single code block.
             Must adhere strictly to the output format.
             Output only the number of steps necessary to solve the problem, with no upper limit.
             Do not include any comments; just pure YAML.      
         "#;
-        return system_prompt.to_string()
+        return system_prompt.to_string();
     }
 
     fn get_user_prompt_with_context(&self) -> String {

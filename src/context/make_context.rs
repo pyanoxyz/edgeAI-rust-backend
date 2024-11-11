@@ -155,14 +155,14 @@ fn combine_contexts(
         .map(|(file_path, _, content, _)| format!("file_path: {}\nContent: {}", file_path, content))
         .collect();
 
-    info!("Context from the files {:?}", formatted_context);
+    // info!("Context from the files {:?}", formatted_context);
 
     let nearest_queries: Vec<String> = query_context
         .iter()
         .map(|(_, _, _, compressed_prompt_response, _)| compressed_prompt_response.clone())
         .collect();
 
-    info!("Context from the chat history {:?}", nearest_queries);
+    // info!("Context from the chat history {:?}", nearest_queries);
 
     let mut all_context: HashSet<String> = last_chats.into_iter().collect(); // Remove duplicates
     all_context.extend(formatted_context);

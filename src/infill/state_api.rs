@@ -46,9 +46,7 @@ pub async fn mode_state(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRe
 }
 
 #[get("/run-infill-model")]
-async fn run_model(
-    data: web::Data<Arc<InfillModelState>> // Accepts the shared state (ModelState) wrapped in an Arc and web::Data for thread-safe access.
-) -> Result<HttpResponse, Error> {
+async fn run_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpResponse, Error> {
     // Acquires an asynchronous lock on the model process state to ensure only one process is running at a time.
     let mut model_process_guard = data.infill_model_process.lock().await;
 
@@ -67,7 +65,7 @@ async fn run_model(
 
     // Define a callback function that will be invoked when the model process starts, capturing the process PID.
     let callback = {
-        let data_clone = data.clone(); // Clone the shared state (Arc<ModelState>) so that the callback can safely reference it.
+        let data_clone = data.clone();
         move |pid: Option<u32>| {
             // The callback captures the PID of the newly started model process.
             let mut model_pid_guard = data_clone.infill_model_pid.lock().unwrap(); // Lock the PID to update it.
@@ -159,7 +157,7 @@ async fn restart_model(data: web::Data<Arc<InfillModelState>>) -> Result<HttpRes
     // Call the run_model logic to start the new model
     // Define a callback that stores the process PID in the shared state
     let callback = {
-        let data_clone = data.clone(); // Clone the Arc<ModelState> to extend the lifetime
+        let data_clone = data.clone();
         move |pid: Option<u32>| {
             let mut model_pid_guard = data_clone.infill_model_pid.lock().unwrap();
             *model_pid_guard = pid; // Store the PID in shared state
