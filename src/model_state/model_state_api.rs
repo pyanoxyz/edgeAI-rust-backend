@@ -6,12 +6,13 @@ use crate::model_state::model_process::{
     kill_model_process,
     run_llama_server,
     get_app_config_json,
+    get_app_config,
 };
 use sysinfo::{ ProcessExt, System, SystemExt };
 use serde::{ Deserialize, Serialize };
 use tokio::time::{ sleep, Duration, Instant }; // Import sleep and Duration from tokio
 use tokio::process::Command;
-use crate::model_state::state::ModelState;
+use crate::model_state::state::{ ModelState, AppConfigJson };
 // use crate::database::db_config::DB_INSTANCE;
 use reqwest::Client;
 use dirs::home_dir;
@@ -84,6 +85,22 @@ async fn run_model(
     let new_model_type = post_data.model.clone();
     // Check if the model process is already running by verifying if the process handle exists.
     let model_running = model_process_guard.is_some();
+
+    let config: AppConfigJson = get_app_config();
+
+    let mut model_file_name = "";
+    if let Some(model) = config.get_model(&new_model_type) {
+        model_file_name = &model.model_name;
+    }
+
+    let home_dir = home_dir().expect("Failed to retrieve home directory");
+    let model_path = home_dir.join(".pyano/models").join(model_file_name.clone());
+
+    // check if model path exists
+    // debug!("Model path: {:#?}", model_path.to_str());
+    if !model_path.exists() {
+        return Ok(HttpResponse::BadRequest().json(json!({"message": "Model file not found"})));
+    }
 
     if model_running {
         if *model_type == new_model_type {
