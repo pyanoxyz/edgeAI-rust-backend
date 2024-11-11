@@ -1,7 +1,19 @@
 {
   "modelTypes": {
     "base": {
-      "name": "Base Coder",
+      "name": "Base Coder 7b",
+      "description": "General purpose coding model",
+      "isOptional": true,
+      "category": "coder"
+    },
+    "base14": {
+      "name": "Base Coder 14b",
+      "description": "General purpose coding model with 14b parameters",
+      "isOptional": true,
+      "category": "coder"
+    },
+    "base32": {
+      "name": "Base Coder 32b",
       "description": "General purpose coding model",
       "isOptional": true,
       "category": "coder"
@@ -39,7 +51,7 @@
         "batch_size": 1024,
         "mlock": false,
         "mmap": false,
-        "system_prompt": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+        "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
       }
     },
     {
@@ -71,6 +83,23 @@
         "ctx_size": 32768,
         "gpu_layers_offloading": -1,
         "batch_size": 8192,
+        "mlock": false,
+        "mmap": false,
+        "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+      }
+    },
+    {
+      "name": "base-coder.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5.1-Coder-7B-Instruct-Q8_0.gguf",
+      "type": "model",
+      "modelType": "base",
+      "minRam": "48",
+      "isOptional": true,
+      "modelConfig": {
+        "ctx_size": 64000,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16000,
         "mlock": false,
         "mmap": false,
         "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
