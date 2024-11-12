@@ -1,19 +1,7 @@
 {
   "modelTypes": {
     "base": {
-      "name": "Base Coder 7b",
-      "description": "General purpose coding model",
-      "isOptional": true,
-      "category": "coder"
-    },
-    "base14": {
-      "name": "Base Coder 14b",
-      "description": "General purpose coding model with 14b parameters",
-      "isOptional": true,
-      "category": "coder"
-    },
-    "base32": {
-      "name": "Base Coder 32b",
+      "name": "Base Coder",
       "description": "General purpose coding model",
       "isOptional": true,
       "category": "coder"
@@ -162,7 +150,8 @@
       "path": ".pyano/models/",
       "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5.1-Coder-1.5B-Instruct-Q8_0.gguf",
       "type": "model",
-      "modelType": "infill"
+      "modelType": "infill",
+      "minRam": "8"
     },
     {
       "name": "languages.so",
