@@ -1,8 +1,20 @@
 {
   "modelTypes": {
     "base": {
-      "name": "Base Coder",
-      "description": "General purpose coding model",
+      "name": "Base Coder 7B",
+      "description": "General purpose coding model with 7B parameters.",
+      "isOptional": true,
+      "category": "coder"
+    },
+    "base14B": {
+      "name": "Base Coder 14B",
+      "description": "General purpose coding model with 14B parameters.",
+      "isOptional": true,
+      "category": "coder"
+    },
+    "base32B": {
+      "name": "Base Coder 32B",
+      "description": "General purpose coding model with 32B parameters.",
       "isOptional": true,
       "category": "coder"
     },
@@ -93,7 +105,57 @@
         "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
       }
     },
-
+    {
+      "name": "base-coder-14b.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-14B-Instruct-Q6_K_L.gguf",
+      "type": "model",
+      "modelType": "base14B",
+      "minRam": "24",
+      "isOptional": true,
+      "modelConfig": {
+        "ctx_size": 32768,
+        "gpu_layers_offloading": -1,
+        "batch_size": 8192,
+        "mlock": false,
+        "mmap": false,
+        "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+      }
+    },
+    {
+      "name": "base-coder-14b.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-14B-Instruct-Q8_0.gguf",
+      "type": "model",
+      "modelType": "base14B",
+      "minRam": "48",
+      "isOptional": true,
+      "modelConfig": {
+        "ctx_size": 64000,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16000,
+        "mlock": false,
+        "mmap": false,
+        "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+      }
+    },
+    {
+      "name": "base-coder-32b.gguf",
+      "path": ".pyano/models/",
+      "url": "https://downloads.pyano.network/resources/backend/models/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
+      "type": "model",
+      "modelType": "base32B",
+      "minRam": "48",
+      "isOptional": true,
+      "modelConfig": {
+        "ctx_size": 64000,
+        "gpu_layers_offloading": -1,
+        "batch_size": 16000,
+        "mlock": false,
+        "mmap": false,
+        "system_prompt": "<|im_start|>system{system_prompt}<|im_end|><|im_start|>user{user_prompt}<|im_end|><|im_start|>assistant"
+      }
+    },
     {
       "name": "solidity-typescript-coder.gguf",
       "path": ".pyano/models/",
