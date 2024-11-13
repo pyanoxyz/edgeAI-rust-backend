@@ -41,7 +41,6 @@ impl Agent for PlannerAgent {
             details:
             filename: "[filename if applicable]"
             directory: "[directory if applicable]"
-            package_name: "[packages to be installed if applicable]"
             command: "[Command to be executed if applicable]"
         - ...
 
@@ -50,7 +49,6 @@ impl Agent for PlannerAgent {
             Only use the following four keys within the details field:
                 filename: "[filename if applicable]"
                 directory: "[directory if applicable]"
-                package_name: "[packages to be installed if applicable]"
                 command: "[Command to be executed if applicable]"
 
         Command Guidance (for action field in each step):
