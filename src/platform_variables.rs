@@ -17,8 +17,6 @@ const QWEN_PROMPT_TEMPLATE: &str =
 //     Assistant: <｜end▁of▁sentence｜>Assistant:
 //     "#;
 
-
-
 pub fn get_default_prompt_template() -> String {
     let sytem_prompt = match DB_INSTANCE.get_system_prompt() {
         Ok(system_prompt) => {

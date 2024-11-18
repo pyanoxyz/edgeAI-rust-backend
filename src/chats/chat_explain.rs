@@ -2,13 +2,12 @@ use actix_web::{ post, web, HttpRequest, HttpResponse, Error };
 use crate::llm_stream::handle::stream_to_chat_client;
 use serde::{ Deserialize, Serialize };
 use super::chat_types::RequestType;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 use crate::session_manager::check_session;
 use serde_json::json;
 use super::utils::handle_stream_completion;
 use crate::context::make_context::make_context;
 use reqwest::Client;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatExplainRequest {
@@ -21,7 +20,11 @@ pub fn register_routes(cfg: &mut web::ServiceConfig) {
 }
 
 #[post("/chat/explain")]
-pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data<Client>, _req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn chat_explain(
+    data: web::Json<ChatExplainRequest>,
+    client: web::Data<Client>,
+    _req: HttpRequest
+) -> Result<HttpResponse, Error> {
     let session_id = match check_session(data.session_id.clone()) {
         Ok(id) => id,
         Err(e) => {
@@ -34,7 +37,7 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
             );
         }
     };
-    
+
     let accumulated_content = Arc::new(Mutex::new(String::new()));
     let accumulated_content_clone = Arc::clone(&accumulated_content);
 
@@ -48,20 +51,21 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
     let context = make_context(&session_id, &data.prompt, 3).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    
-    
-    let prompt_with_context = format!(r#"
+
+    let prompt_with_context = format!(
+        r#"
         Context from prior conversations and uploaded files (separated by '----------CONTEXT----------'): 
         {context}
         New question or coding request: {user_prompt}
 
         Please provide your response following instruction-tuning principles.
         "#,
-            context = context,
-            user_prompt = &data.prompt
-        );
+        context = context,
+        user_prompt = &data.prompt
+    );
 
-    let system_prompt: &str = r#"
+    let system_prompt: &str =
+        r#"
         You are an expert code analyst. Provide a step-by-step breakdown of code snippets, following these steps:
 
         1. **Overview**: Summarize the purpose of the code.
@@ -72,9 +76,8 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
         6. **Clarity**: Ensure your explanation is easy to understand.
 
         Structure:
-        1. `ORIGINAL CODE`: Display the code.
-        2. **EXPLANATION**: Provide a detailed breakdown.
-        3. **SUMMARY**: Conclude with a brief summary.
+        1. **EXPLANATION**: Provide a detailed breakdown.
+        2. **SUMMARY**: Conclude with a brief summary.
 
         Formatting:
         - Use GFM when needed.
@@ -88,12 +91,18 @@ pub async fn chat_explain(data: web::Json<ChatExplainRequest>, client: web::Data
         system_prompt,
         &prompt_with_context,
         accumulated_content_clone,
-        tx,
+        tx
     ).await?;
     // Spawn a separate task to handle the stream completion
     // Ensure the main async task is spawned correctly
     tokio::spawn(async move {
-        handle_stream_completion(rx, accumulated_content, shared_session_id_clone, shared_prompt_clone, RequestType::Explain).await;
+        handle_stream_completion(
+            rx,
+            accumulated_content,
+            shared_session_id_clone,
+            shared_prompt_clone,
+            RequestType::Explain
+        ).await;
     });
     Ok(response)
 }

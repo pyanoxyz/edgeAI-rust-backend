@@ -4,18 +4,18 @@ use std::fs;
 use url::Url;
 use tempfile::TempDir;
 use reqwest::Client;
-use std::io::{self};
+use std::io::{ self };
 use std::path::Path;
 use git2::Repository;
-use log::{info, error, warn};
-use crate::parser::parse_code::{ParseCode, Chunk, ChunkWithCompressedData};
+use log::{ info, error, warn };
+use crate::parser::parse_code::{ ParseCode, Chunk, ChunkWithCompressedData };
 use crate::database::db_config::DB_INSTANCE;
 use crate::embeddings::text_embeddings::generate_text_embedding;
 use crate::prompt_compression::compress::get_attention_scores;
-use crate::similarity_index::index::{add_to_index, remove_from_index};
+use crate::similarity_index::index::{ add_to_index, remove_from_index };
 use rand::Rng;
 use std::collections::HashSet;
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use std::time::SystemTime;
 #[derive(Debug)]
 struct InvalidGitURLError(String);
@@ -32,13 +32,17 @@ fn clean_and_validate_git_url(url: &str) -> Result<String, Box<dyn Error>> {
     // Remove '/tree/master' or similar paths from the URL
     let re = Regex::new(r"/tree/[^/]+")?;
     let cleaned_url = re.replace_all(url, "").to_string();
-    
+
     // Parse the URL
     let parsed_url = Url::parse(&cleaned_url)?;
 
     // Check if the URL ends with .git
     if !parsed_url.path().ends_with(".git") {
-        return Err(Box::new(InvalidGitURLError(format!("The URL {} does not end with '.git'", cleaned_url))));
+        return Err(
+            Box::new(
+                InvalidGitURLError(format!("The URL {} does not end with '.git'", cleaned_url))
+            )
+        );
     }
 
     Ok(cleaned_url)
@@ -52,7 +56,10 @@ fn clean_and_validate_git_url(url: &str) -> Result<String, Box<dyn Error>> {
 /// # Returns
 
 /// The path to the temporary directory where the repo was cloned, or an error.
-async fn download_github_repo(repo_url: &str, temp_dir: &TempDir) -> Result<String, Box<dyn std::error::Error>> {
+async fn download_github_repo(
+    repo_url: &str,
+    temp_dir: &TempDir
+) -> Result<String, Box<dyn std::error::Error>> {
     // Clean and validate the provided GitHub URL
     let validated_url = clean_and_validate_git_url(repo_url)?;
     let repo_dir = temp_dir.path().to_path_buf();
@@ -61,15 +68,13 @@ async fn download_github_repo(repo_url: &str, temp_dir: &TempDir) -> Result<Stri
 
     // Use git2 to clone the repository into the temporary directory
     // let repo_dir = temp_dir.path().to_path_buf();
-    
+
     // Clone the repository using git2
     Repository::clone(&validated_url, &repo_dir)?;
 
     // Return the path to the cloned repository
     Ok(repo_dir.to_string_lossy().to_string())
 }
-
-
 
 fn is_excluded_directory(dir_name: &str) -> bool {
     // List of common directories to exclude
@@ -87,7 +92,7 @@ fn is_excluded_directory(dir_name: &str) -> bool {
         "Pods",
         ".git",
         ".cache",
-        "__pycache__",
+        "__pycache__"
     ];
 
     excluded_dirs.contains(&dir_name)
@@ -127,7 +132,7 @@ fn traverse_directory(dir_path: &str, file_paths: &mut Vec<String>) -> io::Resul
                 file_paths.push(path.to_string_lossy().to_string());
             }
         }
-    } else{
+    } else {
         info!("Couldnt find this directory {:?}", path);
     }
 
@@ -155,16 +160,20 @@ async fn is_remote_repo(path: &str) -> Result<bool, Box<dyn Error>> {
     Ok(false)
 }
 
-pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<Vec<Chunk>, Box<dyn Error>> {
+pub async fn index_code(
+    user_id: &str,
+    session_id: &str,
+    path: &str
+) -> Result<Vec<Chunk>, Box<dyn Error>> {
     let mut file_paths = Vec::new();
     let parse_code = ParseCode::new();
     let mut all_chunks: Vec<Chunk> = Vec::new();
     let mut chunks_with_compressed_data: Vec<ChunkWithCompressedData> = Vec::new();
 
-    //if this is empty which means the path is being indexed for the first time, 
+    //if this is empty which means the path is being indexed for the first time,
     // if not, then the path have been indexed earlier
     let if_already_index = DB_INSTANCE.fetch_path_session(user_id, session_id, path);
-    //Storing parent files in the database, before storing individual chunks for parent in 
+    //Storing parent files in the database, before storing individual chunks for parent in
     //another table
     // DB_INSTANCE.store_parent_context(user_id, session_id, path);
     // First, check if it's a local directory
@@ -178,22 +187,27 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         match if_already_index {
             Some(value) => {
                 if let Some(timestamp) = value.get("timestamp") {
-
                     //all the files that has been changed since the last time the repo has been indexed
-                    let modified_files = get_modified_files_since(path, timestamp.as_str().unwrap())?;
-                    warn!("files that are modified since last indexed {:?} {}", modified_files, path);
-                 
+                    let modified_files = get_modified_files_since(
+                        path,
+                        timestamp.as_str().unwrap()
+                    )?;
+                    warn!(
+                        "files that are modified since last indexed {:?} {}",
+                        modified_files,
+                        path
+                    );
+
                     delete_index_only_files(user_id, session_id, modified_files.clone());
                     for file_path in &modified_files {
                         let chunks = parse_code.process_local_file(file_path);
                         all_chunks.extend(chunks.into_iter().flatten());
-            
                     }
                     // You can now use `timestamp` for further processing here
                 } else {
                     println!("Timestamp not found in the JSON value");
                 }
-            },
+            }
             None => {
                 info!("Path is being indexed for the first time {}", path);
 
@@ -202,14 +216,13 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
                 for file_path in &file_paths {
                     let chunks = parse_code.process_local_file(file_path);
                     all_chunks.extend(chunks.into_iter().flatten());
-        
-                }        
+                }
             }
         }
-
-    } 
-    // Check if it's a local file
-    else if Path::new(path).is_file() {
+    } else if
+        // Check if it's a local file
+        Path::new(path).is_file()
+    {
         filetype = "local";
         category = "files";
         // Add the file path directly to the list
@@ -217,10 +230,10 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
         info!("The path = {} is a local file.", path);
         let chunks = parse_code.process_local_file(path);
         all_chunks.extend(chunks.into_iter().flatten());
-    }
-    
-    // Check if it's a remote repository
-    else if is_remote_repo(path).await? {
+    } else if
+        // Check if it's a remote repository
+        is_remote_repo(path).await?
+    {
         filetype = "github_repo";
         category = "git_urls";
         let temp_dir = TempDir::new()?;
@@ -233,10 +246,11 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
             let chunks = parse_code.process_local_file(file_path);
             all_chunks.extend(chunks.into_iter().flatten());
         }
-        
-    } 
-    // Check if it's a remote file
-    else if path.starts_with("http://") || path.starts_with("https://") {
+    } else if
+        // Check if it's a remote file
+        path.starts_with("http://") ||
+        path.starts_with("https://")
+    {
         filetype = "remote";
         category = "files";
         file_paths.push(path.to_string());
@@ -246,34 +260,33 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
             // Extend `all_chunks` with the actual chunks
             all_chunks.extend(chunks.into_iter());
         }
-    } 
-    // If none of the conditions are met
-    else {
+    } else {
+        // If none of the conditions are met
         info!("The path is neither a local directory, file, remote repository, nor a remote file.");
     }
 
-
     // Create a `HashSet` to track unique content
     let mut unique_chunks = HashSet::new();
-    
+
     // Filter out duplicate chunks based on `content`, keeping the original `Chunk`
     all_chunks.retain(|chunk| unique_chunks.insert(chunk.content.clone()));
-    
+
     DB_INSTANCE.store_parent_context(user_id, session_id, path, filetype, category);
 
     for chunk in &all_chunks {
-
         let tokens: Option<Vec<String>> = compress_chunk_content(chunk).await;
         let unwrapped_token = tokens.unwrap();
-        let compressed_content = unwrapped_token.join(" ");        
-        info!("content_tokens = {}, compressed_content_tokens={}", &chunk.content.len(), compressed_content.len());
+        let compressed_content = unwrapped_token.join(" ");
+        info!(
+            "content_tokens = {}, compressed_content_tokens={}",
+            &chunk.content.len(),
+            compressed_content.len()
+        );
         // Unwrap the embeddings safely
         let chunk_id = generate_rowid();
 
-
         // Try to get the embeddings and update embeddings_vec
         if let Some(embeddings) = compressed_content_embeddings(&compressed_content).await {
-
             let chunk_with_data = ChunkWithCompressedData {
                 chunk: chunk.clone(), // Assuming Chunk implements Clone
                 compressed_content: compressed_content.clone(),
@@ -286,22 +299,23 @@ pub async fn index_code(user_id: &str, session_id: &str, path: &str) -> Result<V
             error!("Failed to get embeddings for chunk: {:?}", chunk);
         }
 
-        DB_INSTANCE.store_children_context(user_id, 
-                        session_id,
-                        path, 
-                        &chunk.chunk_type, 
-                        &chunk.content, 
-                        &compressed_content,
-                        chunk.start_line, 
-                        chunk.end_line, 
-                        &chunk.file_path, 
-                        chunk_id
-                    )
+        DB_INSTANCE.store_children_context(
+            user_id,
+            session_id,
+            path,
+            &chunk.chunk_type,
+            &chunk.content,
+            &compressed_content,
+            chunk.start_line,
+            chunk.end_line,
+            &chunk.file_path,
+            chunk_id
+        );
     }
 
     add_to_index(session_id, chunks_with_compressed_data);
     info!("Updating the session context with path = {} with the latest timestamp", path);
-    DB_INSTANCE.update_session_context_timestamp(user_id, session_id, path);
+    let _ = DB_INSTANCE.update_session_context_timestamp(user_id, session_id, path);
     Ok(all_chunks)
 }
 
@@ -310,22 +324,27 @@ pub fn generate_rowid() -> u64 {
     rng.gen_range(1_000_000_000_000_000..=9_999_999_999_999_999)
 }
 
-async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>>{
+async fn compressed_content_embeddings(content: &str) -> Option<Vec<f32>> {
     let embeddings_result = generate_text_embedding(content).await;
     let embeddings = match embeddings_result {
         Ok(embeddings) => embeddings,
-        Err(_) => return None,
+        Err(_) => {
+            return None;
+        }
     };
     Some(embeddings)
 }
 
-async fn compress_chunk_content (chunk: &Chunk) -> Option<Vec<String>>{
-    let result: Result<Vec<String>, Box<dyn Error + Send + Sync>> = get_attention_scores(&chunk.content).await;
+async fn compress_chunk_content(chunk: &Chunk) -> Option<Vec<String>> {
+    let result: Result<Vec<String>, Box<dyn Error + Send + Sync>> = get_attention_scores(
+        &chunk.content
+    ).await;
     let tokens = match result {
         Ok(tokens) => tokens,
-        Err(e) =>  {println!("Error while unwrapping tokens: {:?}", e);
-        return None
-       }
+        Err(e) => {
+            println!("Error while unwrapping tokens: {:?}", e);
+            return None;
+        }
     };
     Some(tokens)
 }
@@ -364,7 +383,6 @@ fn get_modified_files_since(dir: &str, timestamp_str: &str) -> io::Result<Vec<St
     Ok(modified_files)
 }
 
-
 pub fn delete_index(user_id: &str, session_id: &str, files: Vec<String>) {
     for file_path in files {
         match DB_INSTANCE.delete_parent_context(&file_path) {
@@ -372,11 +390,13 @@ pub fn delete_index(user_id: &str, session_id: &str, files: Vec<String>) {
                 info!("Successfully deleted parent context for file: {:?}", file_path);
             }
             Err(e) => {
-                error!("Error deleting {}", e.to_string());            
+                error!("Error deleting {}", e.to_string());
             }
         }
 
-        let vec_row_ids = match DB_INSTANCE.delete_children_context_by_parent_path(user_id, session_id, &file_path) {
+        let vec_row_ids = match
+            DB_INSTANCE.delete_children_context_by_parent_path(user_id, session_id, &file_path)
+        {
             Ok(ids) => {
                 info!("Successfully deleted chunks for file: {}", file_path);
                 ids
@@ -393,7 +413,9 @@ pub fn delete_index(user_id: &str, session_id: &str, files: Vec<String>) {
 
 pub fn delete_index_only_files(user_id: &str, session_id: &str, files: Vec<String>) {
     for file_path in files {
-        let vec_row_ids = match DB_INSTANCE.delete_children_context_by_file_path(user_id, session_id, &file_path) {
+        let vec_row_ids = match
+            DB_INSTANCE.delete_children_context_by_file_path(user_id, session_id, &file_path)
+        {
             Ok(ids) => {
                 info!("Successfully deleted chunks for file: {}", file_path);
                 ids

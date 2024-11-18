@@ -1,15 +1,30 @@
-
-
 use crate::database::db_config::DBConfig;
 use rusqlite::params;
 use crate::model_state::state::ConfigSection;
 
+impl DBConfig {
+    pub fn update_system_prompt(&self, model_name: &str, system_prompt: &str) {
+        let connection = self.common_connection.lock().unwrap();
+        connection
+            .execute(
+                "
+            INSERT INTO config (id, model_name, model_url, system_prompt)
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                model_name = excluded.model_name,
+                model_url = excluded.model_url,
+                system_prompt = excluded.system_prompt;
+            ",
+                params![model_name, "none", system_prompt]
+            )
+            .unwrap();
+    }
 
-impl DBConfig{
     pub fn update_model_config(&self, config: &ConfigSection) {
         let connection = self.common_connection.lock().unwrap();
-        connection.execute(
-            "
+        connection
+            .execute(
+                "
             INSERT INTO config (id, model_name, model_url, model_size, ctx_size, gpu_layers_offloading, batch_size, mlock, nmap, system_prompt)
             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(id) DO UPDATE SET
@@ -23,22 +38,22 @@ impl DBConfig{
                 nmap = excluded.nmap,
                 system_prompt = excluded.system_prompt;
             ",
-            params![
-                config.model_name,
-                config.model_url,
-                config.model_size,
-                config.ctx_size,
-                config.gpu_layers_offloading,
-                config.batch_size,
-                config.mlock as i32,
-                config.mmap as i32,
-                config.system_prompt,
-            ],
-        ).unwrap();
+                params![
+                    config.model_name,
+                    config.model_url,
+                    config.model_size,
+                    config.ctx_size,
+                    config.gpu_layers_offloading,
+                    config.batch_size,
+                    config.mlock as i32,
+                    config.mmap as i32,
+                    config.system_prompt
+                ]
+            )
+            .unwrap();
     }
-    
-     
-    pub fn get_model_config(&self) ->  Result<ConfigSection, rusqlite::Error> {
+
+    pub fn get_model_config(&self) -> Result<ConfigSection, rusqlite::Error> {
         let connection = self.common_connection.lock().unwrap();
         let mut stmt = connection.prepare(
             "
@@ -53,7 +68,7 @@ impl DBConfig{
                 nmap,
                 system_prompt
             FROM config WHERE id = 1;
-            ",
+            "
         )?;
 
         let config = stmt.query_row([], |row| {
@@ -72,28 +87,27 @@ impl DBConfig{
 
         config
     }
-    
+
     pub fn get_system_prompt(&self) -> Result<String, rusqlite::Error> {
         // Lock the common database connection to ensure safe access across threads
         let connection = self.common_connection.lock().unwrap();
-    
+
         // Prepare the SQL statement to select the system_prompt from the config table
         let mut stmt = connection.prepare(
             "
             SELECT
                 system_prompt
             FROM config WHERE id = 1;
-            ",
+            "
         )?;
-    
+
         // Query the database and return the system_prompt as a String
         let system_prompt = stmt.query_row([], |row| {
             // Extract and return the system_prompt value from the row
             row.get(0)
         });
-    
+
         // Return the system_prompt or propagate any error encountered
         system_prompt
     }
-
 }

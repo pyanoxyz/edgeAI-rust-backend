@@ -1,86 +1,76 @@
-use log::{debug, error, info};
+use log::{ debug, error };
 use dirs::home_dir;
+// use psutil::host::info;
 use tokio::io::{ AsyncBufReadExt, BufReader };
 use tokio::process::Command as tokio_command;
-use std::collections::HashMap;
-use super::state::ConfigSection;
+// use std::collections::HashMap;
+use super::state::AppConfigJson;
 use std::fs::create_dir_all;
 use std::fs;
-use std::process::Command;
+
+// use std::process::Command;
 use crate::database::db_config::DB_INSTANCE;
 
-fn get_system_ram_gb() -> u64 {
-    #[cfg(target_os = "linux")]
-    {
-        let meminfo = fs::read_to_string("/proc/meminfo").unwrap();
-        let mem_total_line = meminfo
-            .lines()
-            .find(|line| line.starts_with("MemTotal"))
-            .unwrap();
-        let mem_kb: u64 = mem_total_line
-            .split_whitespace()
-            .nth(1)
-            .unwrap()
-            .parse()
-            .unwrap();
-        mem_kb / 1024 / 1024 // Convert to GB
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let output = Command::new("sysctl")
-            .arg("-n")
-            .arg("hw.memsize")
-            .output()
-            .unwrap(); // This now works because output() is synchronous
-        let mem_bytes: u64 = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse()
-            .unwrap();
-        mem_bytes / 1024 / 1024 / 1024 // Convert to GB
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        unimplemented!("Unsupported OS");
-    }
-}
+// fn get_system_ram_gb() -> u64 {
+//     #[cfg(target_os = "linux")]
+//     {
+//         let meminfo = fs::read_to_string("/proc/meminfo").unwrap();
+//         let mem_total_line = meminfo
+//             .lines()
+//             .find(|line| line.starts_with("MemTotal"))
+//             .unwrap();
+//         let mem_kb: u64 = mem_total_line.split_whitespace().nth(1).unwrap().parse().unwrap();
+//         mem_kb / 1024 / 1024 // Convert to GB
+//     }
+//     #[cfg(target_os = "macos")]
+//     {
+//         let output = Command::new("sysctl").arg("-n").arg("hw.memsize").output().unwrap(); // This now works because output() is synchronous
+//         let mem_bytes: u64 = String::from_utf8_lossy(&output.stdout).trim().parse().unwrap();
+//         mem_bytes / 1024 / 1024 / 1024 // Convert to GB
+//     }
+//     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+//     {
+//         unimplemented!("Unsupported OS");
+//     }
+// }
 
+pub fn get_app_config_json() -> String {
+    let home_dir = home_dir().expect("Failed to retrieve home directory");
 
-//If the system's available RAM is 84 GB, the function select_config_section will iterate over the keys 
-//in the provided config object to find the largest key that is less than or equal to the system's RAM.
-//Here's a breakdown of the logic:
-//It collects all keys from the config (in your case, "8", "16", "24", "32", "48", "64", "96") and 
-//converts them to integers: 8, 16, 24, 32, 48, 64, 96.
-//These keys are sorted in ascending order.
-//The function iterates over the sorted keys, finding the largest one that is less than or equal to 84 GB.
-//The largest key less than or equal to 84 is 64 (since 96 is greater than 84).
-//Therefore, the selected_config will be the configuration with the key "64", 
-fn select_config_section(config: &HashMap<String, ConfigSection>) -> &ConfigSection {
-    let ram_gb = get_system_ram_gb();
-    println!("System RAM: {} GB", ram_gb);
+    // Constructs the path to the `.pyano/configs` directory inside the home directory
+    let config_dir = home_dir.join(".pyano/configs"); // Spawn a new thread for downloading the model and initialization
 
-    // Convert keys to integers and sort them
-    let mut ram_keys: Vec<u64> = config.keys()
-        .map(|k| k.parse::<u64>().unwrap())
-        .collect();
-    ram_keys.sort();
+    // TODO move this to dev scripts
+    // Ensures that the model directory exists by creating all directories in the path if they don't exist
+    create_dir_all(&config_dir).expect("Failed to create config directory");
 
-    // Find the largest key less than or equal to ram_gb
-    let mut selected_ram = ram_keys[0]; // default to the smallest config
-    for &ram in ram_keys.iter() {
-        if ram <= ram_gb {
-            selected_ram = ram;
-        } else {
-            break;
+    let config_file = config_dir.join("app-config.json");
+
+    // Converts the `PathBuf` (config file path) into a string representation for further use
+    let config_file_str = config_file
+        .to_str()
+        .expect("Failed to convert PathBuf to str")
+        .to_string();
+
+    // Attempts to read the content of the config file and handle potential errors
+    let config_data = match fs::read_to_string(config_file_str) {
+        Ok(result) => result,
+        Err(err) => {
+            error!("Config model json cannot be loaded: {}", err);
+            std::process::exit(1);
         }
-    }
-
-    println!("Selected RAM configuration: {} GB", selected_ram);
-
-    let selected_key = selected_ram.to_string();
-    config.get(&selected_key).unwrap()
+    };
+    config_data
 }
 
+pub fn get_app_config() -> AppConfigJson {
+    let config_data = get_app_config_json();
 
+    let config: AppConfigJson = serde_json
+        ::from_str(&config_data)
+        .expect("JSON was not well-formatted");
+    config
+}
 
 pub async fn kill_model_process(parent_pid: u32) -> Result<(), std::io::Error> {
     // Find the child process using pgrep
@@ -102,74 +92,68 @@ pub async fn kill_model_process(parent_pid: u32) -> Result<(), std::io::Error> {
 }
 
 // Function that starts the model process and takes a callback for the parent PID
-pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Send + 'static {
-    // Retrieves the user's home directory or exits if it fails
-    let home_dir = home_dir().expect("Failed to retrieve home directory");
-    
-    // Constructs the path to the `.pyano/configs` directory inside the home directory
-    let config_dir = home_dir.join(".pyano/configs");    // Spawn a new thread for downloading the model and initialization
-    
-    // Ensures that the model directory exists by creating all directories in the path if they don't exist
-    create_dir_all(&config_dir).expect("Failed to create config directory");
+// modeltypes = base, solidity_typescript
+pub async fn run_llama_server<F>(model_type: String, callback: F)
+    where F: FnOnce(Option<u32>) + Send + 'static
+{
+    let config: AppConfigJson = get_app_config();
 
-    // Joins the directory path with `model_config.json` to create the full path to the config file
-    let config_file = config_dir.join("model_config.json");
+    let mut model_name = "";
+    let mut ctx_size = &8192;
+    let mut gpu_layers_offloading = &-1;
+    let mut batch_size = &1024;
+    let mut mlock = &false;
+    let mut mmap = &false;
+    let mut system_prompt: Option<&str> = None;
 
-    // Converts the `PathBuf` (config file path) into a string representation for further use
-    let config_file_str = config_file
-        .to_str()
-        .expect("Failed to convert PathBuf to str")
-        .to_string();
-
-    // Attempts to read the content of the config file and handle potential errors
-    let config_data = match fs::read_to_string(config_file_str){
-        Ok(result) => result,
-        Err(err) => {
-            error!("Config model json cannot be loaded: {}", err);
-            std::process::exit(1);
+    if let Some(model) = config.get_model(&model_type) {
+        model_name = &model.model_name;
+        if let Some(config) = &model.model_config {
+            ctx_size = &config.ctx_size;
+            gpu_layers_offloading = &config.gpu_layers_offloading;
+            batch_size = &config.batch_size;
+            mlock = &config.mlock;
+            mmap = &config.mmap;
+            if config.system_prompt.chars().count() > 0 {
+                system_prompt = Some(config.system_prompt.as_str());
+            }
         }
-    };
+    }
+    let home_dir = home_dir().expect("Failed to retrieve home directory");
+    let model_path = home_dir.join(".pyano/models").join(model_name);
 
-    // Parses the JSON content of the config file into a HashMap of String keys and ConfigSection values
-    let config: HashMap<String, ConfigSection> = serde_json::from_str(&config_data)
-    .expect("JSON was not well-formatted");
+    // check if model path exists
+    debug!("Model path: {:#?}", model_path.to_str());
+    if !model_path.exists() {
+        error!("Model path does not exist: {:#?}", model_path.to_str());
+        std::process::exit(1);
+    }
 
-    // Selects the appropriate config section based on system RAM and available options in the config
-    let selected_config = select_config_section(&config);
+    let scripts_dir = home_dir.join(".pyano/scripts");
 
-
-    // Retrieves the current working directory of the process
-    let scripts_dir = home_dir.join(".pyano/scripts");    
-    // Joins the current directory with the relative path to the script that will run the model
-    //this is the shell script that containes the logic to run the model with llama-cpp and serves
-    // the model on a http server
     let script_path = scripts_dir.join("run-model.sh");
-    info!("Scripts path from where run_models.hs i sbeing loaded {:?}", script_path);
+    // info!("Scripts path from where run_models.hs i sbeing loaded {:?}", script_path);
 
     // Spawns a new child process to run the shell script using `bash`, passing environment variables from the selected config
     let mut child = match
-    tokio_command::new("bash")
+        tokio_command
+            ::new("bash")
             .arg(script_path)
-            .env("MODEL_NAME", &selected_config.model_name)
-            .env("MODEL_URL", &selected_config.model_url)
-            .env("CTX_SIZE", selected_config.ctx_size.to_string())
-            .env(
-                "GPU_LAYERS_OFFLOADING",
-                selected_config.gpu_layers_offloading.to_string(),
-            )
-            .env("BATCH_SIZE", selected_config.batch_size.to_string())
-            .env(
-                "MLOCK",
-                selected_config.mlock.to_string(),
-            )
-            .env("MMAP", selected_config.mmap.to_string())
+            .env("MODEL_NAME", model_name)
+            .env("CTX_SIZE", ctx_size.to_string())
+            .env("GPU_LAYERS_OFFLOADING", gpu_layers_offloading.to_string())
+            .env("BATCH_SIZE", batch_size.to_string())
+            .env("MLOCK", mlock.to_string())
+            .env("MMAP", mmap.to_string())
             .stdout(std::process::Stdio::piped()) // Capture stdout
             .stderr(std::process::Stdio::piped()) // Capture stderr
             .spawn()
     {
         Ok(child) => {
             println!("Model process started successfully.");
-            DB_INSTANCE.update_model_config(selected_config);
+            if system_prompt.is_some() {
+                DB_INSTANCE.update_system_prompt(model_name, system_prompt.unwrap());
+            }
             child
         }
         Err(e) => {
@@ -198,7 +182,7 @@ pub async fn run_llama_server<F>(callback: F) where F: FnOnce(Option<u32>) + Sen
     // child.wait().await.expect("Failed to wait on llama.cpp server process");
     match child.wait().await {
         Ok(status) => {
-            println!("Model process completed with status: {}", status);
+            println!("Model process completed with status: {} {}", status, model_type);
         }
         Err(e) => {
             eprintln!("Failed to wait for the model process: {}", e);
