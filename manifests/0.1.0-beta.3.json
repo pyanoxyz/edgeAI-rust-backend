@@ -378,17 +378,17 @@
     {
       "name": "llama-server",
       "path": ".pyano/build/bin/",
-      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4050/llama-server"
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4179/llama-server"
     },
     {
       "name": "ggml-metal.metal",
       "path": ".pyano/build/bin/",
-      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4050/ggml-metal.metal"
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4179/ggml-metal.metal"
     },
     {
       "name": "ggml-common.h",
       "path": ".pyano/build/bin/",
-      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4050/ggml-common.h"
+      "url": "https://downloads.pyano.network/resources/backend/build/bin/llama-b4179/ggml-common.h"
     },
     {
       "name": "run-model.sh",
