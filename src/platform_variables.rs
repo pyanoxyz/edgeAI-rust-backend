@@ -8,6 +8,7 @@ const QWEN_PROMPT_TEMPLATE: &str =
     <|im_start|>user
     {user_prompt}<|im_end|>
     <|im_start|>assistant
+    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
     "#;
 
 // const QWEN_PROMPT_TEMPLATE: &str =

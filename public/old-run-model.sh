@@ -41,7 +41,7 @@ select_model() {
                                 #you can use -1 to move all to GPU.
 
     elif [ $ram_gb -gt 24 ]; then
-        MODEL_NAME="Meta-Llama-3.1-70B-Instruct-IQ1_M.gguf"
+        MODEL_NAME="Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
         MODEL_URL="https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-70B-Instruct-IQ1_M.gguf"
         CTX=20000
         BATCH_SIZE=8192 #It's the number of tokens in the prompt that are fed into the model at a time. For example, if your prompt 
@@ -238,6 +238,4 @@ $BUILD_DIR/llama-server \
   --cache-type-k f16 \
   --cache-type-v f16 \
    --repeat-last-n 64 \
-   --repeat-penalty 1.3 \
-   --top-k 40 \
-   --top-p 0.9
+   --repeat-penalty 1.3
