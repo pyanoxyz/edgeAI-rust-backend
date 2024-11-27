@@ -10,7 +10,7 @@ use std::error::Error as StdError; // Importing the correct trait
 use reqwest::Error as ReqwestError;
 use futures_util::stream::TryStreamExt;
 use tokio_stream::wrappers::ReceiverStream;
-use crate::utils::{ get_llm_temperature, get_local_url };
+use crate::utils::{ get_llm_temperature, get_local_url, get_top_k, get_top_p };
 use crate::platform_variables::get_default_prompt_template;
 use reqwest::Client;
 use tokio::sync::mpsc;
@@ -39,7 +39,10 @@ pub async fn local_agent_execution(
     Box<dyn StdError + Send + Sync + 'static>
 > {
     let llm_temperature = get_llm_temperature();
-    match local_llm_request(client, system_prompt, prompt_with_context, llm_temperature).await {
+    let top_k = get_top_k();
+    let top_p = get_top_p();
+
+    match local_llm_request(client, system_prompt, prompt_with_context, llm_temperature, top_k, top_p).await {
         Ok(stream) => {
             let formatted_stream = format_local_llm_response(stream).await;
             Ok(Box::pin(formatted_stream)) // Pin the stream here using Box::pin
@@ -55,13 +58,15 @@ async fn local_llm_request(
     client: &Client,
     system_prompt: &str,
     prompt_with_context: &str,
-    temperature: f64
+    temperature: f64,
+    top_k: i64,
+    top_p: f64
 ) -> Result<
     impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>,
     Box<dyn StdError + Send + Sync + 'static>
 > {
     let llm_server_url = get_local_url();
-    send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature).await
+    send_llm_request(client, &llm_server_url, system_prompt, prompt_with_context, temperature,  top_k, top_p).await
 }
 
 async fn send_llm_request(
@@ -69,7 +74,9 @@ async fn send_llm_request(
     llm_server_url: &str,
     system_prompt: &str,
     prompt_with_context: &str,
-    temperature: f64
+    temperature: f64,
+    top_k: i64,
+    top_p: f64
 ) -> Result<
     impl Stream<Item = Result<bytes::Bytes, reqwest::Error>>,
     Box<dyn StdError + Send + Sync + 'static>
@@ -90,6 +97,8 @@ async fn send_llm_request(
             "prompt": full_prompt,
             "stream": true,
             "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
             "cache_prompt": true
         })
         )

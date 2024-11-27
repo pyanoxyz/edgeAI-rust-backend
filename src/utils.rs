@@ -47,13 +47,45 @@ pub fn get_llm_temperature() -> f64 {
     env::var("TEMPERATURE")
         .unwrap_or_else(|_| {
             eprintln!(
-                "Warning: Environment variable TEMPERATURE is not set. Using default value of 0.4."
+                "Warning: Environment variable TEMPERATURE is not set. Using default value of 0.7."
             );
-            "0.4".to_string() // Use default value "0.4" as a string
+            "0.7".to_string() // Use default value "0.4" as a string
         })
         .parse::<f64>()
         .unwrap_or_else(|_| {
-            eprintln!("Error: Failed to parse TEMPERATURE as a float. Using default value of 0.4.");
-            0.4 // Default value if parsing fails
+            eprintln!("Error: Failed to parse TEMPERATURE as a float. Using default value of 0.7.");
+            0.7 // Default value if parsing fails
+        })
+}
+
+pub fn get_top_k() -> i64 {
+    // load_env(); // Load the .env file from the specified path
+    env::var("TOP_K")
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Warning: Environment variable TOP_K is not set. Using default value of 20."
+            );
+            "20".to_string() // Use default value "0.4" as a string
+        })
+        .parse::<i64>()
+        .unwrap_or_else(|_| {
+            eprintln!("Error: Failed to parse TOP_K as a float. Using default value of 20.");
+            20 // Default value if parsing fails
+        })
+}
+
+pub fn get_top_p() -> f64 {
+    // load_env(); // Load the .env file from the specified path
+    env::var("TOP_P")
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Warning: Environment variable TOP_P is not set. Using default value of 0.8."
+            );
+            "0.8".to_string() // Use default value "0.4" as a string
+        })
+        .parse::<f64>()
+        .unwrap_or_else(|_| {
+            eprintln!("Error: Failed to parse TOP_P as a float. Using default value of 0.8.");
+            0.8 // Default value if parsing fails
         })
 }
