@@ -238,6 +238,4 @@ $BUILD_DIR/llama-server \
   --cache-type-k f16 \
   --cache-type-v f16 \
    --repeat-last-n 64 \
-   --repeat-penalty 1.3 \
-   --top-k 40 \
-   --top-p 0.9
+   --repeat-penalty 1.3
